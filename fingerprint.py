@@ -7,6 +7,9 @@ class Fingerprint:
     def __init__(self, data: dict):
         self.key = data['key']
         self.attack_vectors = [AttackVector(a) for a in data['attack_vectors']]
+        # TODO: Change to IPNetwork type
+        self.location: str = data['location']
+        self.target: str = data['target']
 
     def __str__(self):
         return "%s with %d attack vectors" % (self.key, len(self.attack_vectors))
