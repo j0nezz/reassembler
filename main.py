@@ -17,7 +17,6 @@ def read_fingerprint(path: Path, location: str):
     return Fingerprint(data)
 
 
-# Either extend the Fingerprint format with a capture_loca  tion or redesign the Reassembler constructor
 if __name__ == '__main__':
     fingerprints = []
     for dirpath, dirnames, filenames in os.walk('./data'):
@@ -27,5 +26,4 @@ if __name__ == '__main__':
                                          [Path(dirpath) / filename for filename in filenames])))
 
     reassembler = Reassembler(fingerprints)
-    reassembler.find_target()
     reassembler.reassemble()
