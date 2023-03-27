@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fingerprint import Fingerprint
 from reassembler import Reassembler
-from scenario import create_network, draw_network, generate_attack_fingerprint
+from scenario import create_network, draw_network, generate_attack_fingerprint, generate_background_traffic
 
 
 def read_fingerprint(path: Path, location: str):
@@ -30,12 +30,11 @@ if __name__ == '__main__':
     # reassembler.reassemble()
 
 
-    # G = create_network(num_subnets=4, participants_per_subnet=2, num_routers=4, routers_per_layer=2)
-    G = create_network(num_subnets=40, participants_per_subnet=2, num_routers=40, routers_per_layer=4)
+    G = create_network(num_subnets=4, participants_per_subnet=2, num_routers=4, routers_per_layer=2)
     draw_network(G)
 
-    sources = ["P1", "P8", "P12", "P30", "P62", "P63", "P64", "P65", "P66"]
-    target = "P80"
+    sources = ["P1", "P2", "P3"]
+    target = "P6"
 
     fingerprints = generate_attack_fingerprint(G, sources, target)
     output_folder = "fingerprints"
@@ -44,6 +43,6 @@ if __name__ == '__main__':
         os.makedirs(output_folder)
 
     for fingerprint in fingerprints:
-        output_file = os.path.join(output_folder, f"fingerprint_{fingerprint['location_name']}.json")
+        output_file = os.path.join(output_folder, f"fingerprint_{fingerprint['location_name']}_{fingerprint['target_name']}.json")
         with open(output_file, "w") as f:
             json.dump(fingerprint, f, indent=2)

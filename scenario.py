@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 figure(figsize=(10, 10), dpi=120)
 random.seed(12)
 
-__all__ = ['create_network', 'draw_network', 'generate_attack_fingerprint']
+__all__ = ['create_network', 'draw_network', 'generate_background_traffic', 'generate_attack_fingerprint']
 
 
 def create_network(num_subnets, participants_per_subnet, num_routers, routers_per_layer):
@@ -106,21 +106,29 @@ def draw_network(G):
     plt.show()
 
 
+def generate_background_traffic(G, num_background_traffic):
+    combinations = [(x, y) for x, y in itertools.combinations(G.nodes, 2) if x != y]
+    selected_combinations = random.sample(combinations, num_background_traffic)
+    return [(source, target, nx.shortest_path(G, source, target), False) for source, target in selected_combinations]
+
+
 def generate_attack_fingerprint(G, sources, target):
     common_ttls = [32, 64, 128, 255]
-    intermediary_nodes = defaultdict(
-        lambda: {"ttl": defaultdict(int), "sources": set(), "time_start": [], "duration_seconds": [], "nr_packets": [],
-                 "nr_megabytes": []})
+    intermediary_nodes = {}  # by target
 
     # Iterate through each source
-    for source in sources:
-        path = nx.shortest_path(G, source, target)
+    background_traffic = generate_background_traffic(G, num_background_traffic=10)
+    attack_traffic = [(source, target, nx.shortest_path(G, source, target), True) for source in sources]
+
+    print("Traffic", attack_traffic + background_traffic)
+
+    for source, target, path, is_attack in attack_traffic + background_traffic:
         ttl = random.choice(common_ttls)
 
         # Generate random start time and duration for the attack
         start_time = datetime.utcfromtimestamp(0) + timedelta(seconds=random.uniform(0, 10))
-        duration = random.uniform(60, 120)
-        nr_packets = round(random.uniform(0, 10e6))
+        duration = random.uniform(60, 180) if is_attack else random.uniform(10, 70)
+        nr_packets = round(random.uniform(10e3, 10e6)) if is_attack else round(random.uniform(10, 10e4))
         nr_megabytes = round(nr_packets / random.uniform(1000, 5000), 2)
 
         accumulated_weight = 0
@@ -129,55 +137,75 @@ def generate_attack_fingerprint(G, sources, target):
         for i in range(len(path)):
             node = path[i]
 
+            # Initialize the "targets" dictionary in the `intermediary_nodes` dictionary
+            if node not in intermediary_nodes:
+                intermediary_nodes[node] = {
+                    "targets": {},
+                }
+            if target not in intermediary_nodes[node]["targets"]:
+                intermediary_nodes[node]["targets"][target] = {
+                    "ttl": defaultdict(int),
+                    "sources": set(),
+                    "time_start": [],
+                    "duration_seconds": [],
+                    "nr_packets": [],
+                    "nr_megabytes": [],
+                }
+
             if i > 0:
                 prev_node = path[i - 1]
                 edge_weight = G[prev_node][node]['weight']
                 accumulated_weight += edge_weight
 
-            intermediary_nodes[node]["ttl"][ttl] += nr_packets
-            intermediary_nodes[node]["sources"].add(source)
-            intermediary_nodes[node]["time_start"].append(start_time + timedelta(seconds=accumulated_weight))
-            intermediary_nodes[node]["duration_seconds"].append(duration)
-            intermediary_nodes[node]["nr_packets"].append((source, nr_packets))
-            intermediary_nodes[node]["nr_megabytes"].append((source, nr_megabytes))
+            intermediary_nodes[node]["targets"][target]["ttl"][ttl] += nr_packets
+            intermediary_nodes[node]["targets"][target]["sources"].add(source)
+            intermediary_nodes[node]["targets"][target]["time_start"].append(
+                start_time + timedelta(seconds=accumulated_weight))
+            intermediary_nodes[node]["targets"][target]["duration_seconds"].append(duration)
+            intermediary_nodes[node]["targets"][target]["nr_packets"].append((source, nr_packets))
+            intermediary_nodes[node]["targets"][target]["nr_megabytes"].append((source, nr_megabytes))
 
             ttl -= 1
 
     # Generate attack fingerprints for each intermediary node
     fingerprints = []
     for node, node_data in intermediary_nodes.items():
-        ttl_dict = node_data["ttl"]
-        sources = list(node_data["sources"])
+        for target, target_data in node_data["targets"].items():
+            ttl_dict = target_data["ttl"]
+            sources = list(target_data["sources"])
 
-        # Calculate the total number of packets for this intermediary node
-        total_packets = sum(count for _, count in node_data["nr_packets"])
+            # Calculate the total number of packets for this intermediary node
+            total_packets = sum(count for _, count in target_data["nr_packets"])
 
-        # Normalize the TTL values
-        ttl_normalized = {ttl: count / total_packets for ttl, count in ttl_dict.items()}
+            # Normalize the TTL values
+            ttl_normalized = {ttl: count / total_packets for ttl, count in ttl_dict.items()}
 
-        # Calculate the earliest start time and latest end time
-        min_start_time = min(node_data["time_start"])
-        max_end_time = max(
-            t1 + timedelta(seconds=t2) for t1, t2 in zip(node_data["time_start"], node_data["duration_seconds"]))
+            # Calculate the earliest start time and latest end time
+            min_start_time = min(target_data["time_start"])
+            max_end_time = max(
+                t1 + timedelta(seconds=t2) for t1, t2 in
+                zip(target_data["time_start"], target_data["duration_seconds"]))
 
-        fingerprint = {
-            "attack_vectors": [
-                {
-                    "source_ips": [G.nodes[s]["ip"] for s in sources],
-                    "source_ips_name": sources,
-                    "ttl": ttl_normalized,
-                    "time_start": min_start_time.isoformat(),
-                    "duration_seconds": (max_end_time - min_start_time).total_seconds(),
-                    "nr_packets": sum(n for _, n in node_data["nr_packets"]),
-                    "nr_megabytes": sum(n for _, n in node_data["nr_megabytes"]),
+            fingerprint = {
+                "attack_vectors": [
+                    {
+                        "service": None,  # TODO: Different Services
+                        "protocol": "TCP",  # TODO: Also support different protocols
+                        "source_ips": [G.nodes[s]["ip"] for s in sources],
+                        "source_ips_name": sources,
+                        "ttl": ttl_normalized,
+                        "time_start": min_start_time.isoformat(),
+                        "duration_seconds": (max_end_time - min_start_time).total_seconds(),
+                        "nr_packets": sum(n for _, n in target_data["nr_packets"]),
+                        "nr_megabytes": sum(n for _, n in target_data["nr_megabytes"]),
 
-                }
-            ],
-            "target": G.nodes[target]["ip"],
-            "target_name": target,
-            "location": G.nodes[node]["ip"],
-            "location_name": node
-        }
-        fingerprints.append(fingerprint)
+                    }
+                ],
+                "target": G.nodes[target]["ip"],
+                "target_name": target,
+                "location": G.nodes[node]["ip"],
+                "location_name": node
+            }
+            fingerprints.append(fingerprint)
 
     return fingerprints
