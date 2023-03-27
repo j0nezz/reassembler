@@ -134,7 +134,7 @@ def generate_attack_fingerprint(G, sources, target):
                 edge_weight = G[prev_node][node]['weight']
                 accumulated_weight += edge_weight
 
-            intermediary_nodes[node]["ttl"][ttl] += 1  # Increase count for the observed ttl value
+            intermediary_nodes[node]["ttl"][ttl] += nr_packets
             intermediary_nodes[node]["sources"].add(source)
             intermediary_nodes[node]["time_start"].append(start_time + timedelta(seconds=accumulated_weight))
             intermediary_nodes[node]["duration_seconds"].append(duration)
@@ -149,9 +149,11 @@ def generate_attack_fingerprint(G, sources, target):
         ttl_dict = node_data["ttl"]
         sources = list(node_data["sources"])
 
+        # Calculate the total number of packets for this intermediary node
+        total_packets = sum(count for _, count in node_data["nr_packets"])
+
         # Normalize the TTL values
-        ttl_count = sum(ttl_dict.values())
-        ttl_normalized = {ttl: count / ttl_count for ttl, count in ttl_dict.items()}
+        ttl_normalized = {ttl: count / total_packets for ttl, count in ttl_dict.items()}
 
         # Calculate the earliest start time and latest end time
         min_start_time = min(node_data["time_start"])
