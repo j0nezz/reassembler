@@ -200,8 +200,8 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
                     {
                         "service": None,  # TODO: Different Services
                         "protocol": "TCP",  # TODO: Also support different protocols
-                        "source_ips": [G.nodes[s]["ip"] for s in sources],
-                        "source_ips_name": sources,
+                        "source_ips": sorted([G.nodes[s]["ip"] for s in sources]),
+                        "source_ips_name": sorted(sources),
                         "ttl": ttl_normalized,
                         "time_start": min_start_time.isoformat(),
                         "duration_seconds": (max_end_time - min_start_time).total_seconds(),
