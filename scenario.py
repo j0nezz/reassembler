@@ -1,4 +1,7 @@
+import hashlib
 import itertools
+import json
+
 import networkx as nx
 import random
 from matplotlib.pyplot import figure
@@ -14,21 +17,21 @@ random.seed(12)
 __all__ = ['create_network', 'draw_network', 'generate_background_traffic', 'generate_attack_fingerprint']
 
 
-def create_network(num_subnets, participants_per_subnet, num_routers, routers_per_layer):
+def create_network(num_subnets, participants_per_subnet, routers_per_layer):
     G = nx.Graph()
 
     # Generate IP addresses for router subnets
-    router_subnets = [IPNetwork(f"172.16.{i + 1}.0/24") for i in range(num_routers)]
+    router_subnets = [IPNetwork(f"172.16.{i + 1}.0/24") for i in range(num_subnets)]
 
     # Add router nodes to the graph and initialize their IP assignment dictionary
     router_assigned_ips = {}
-    for i in range(num_routers):
+    for i in range(num_subnets):
         router_id = f"R{i + 1}"
         G.add_node(router_id, ip=str(router_subnets[i].ip), subnet=router_subnets[i])
         router_assigned_ips[router_id] = set()
 
     # Generate participants and add them to the graph
-    layers = [list(range(i, i + routers_per_layer)) for i in range(0, num_routers, routers_per_layer)]
+    layers = [list(range(i, i + routers_per_layer)) for i in range(0, num_subnets, routers_per_layer)]
 
     participant_counter = 1
     for _ in range(num_subnets * participants_per_subnet):
@@ -106,18 +109,24 @@ def draw_network(G):
     plt.show()
 
 
+def calculate_hash(data):
+    key = hashlib.md5(json.dumps(data, sort_keys=True).encode('utf-8')).hexdigest()
+    data['key'] = key
+    return data
+
+
 def generate_background_traffic(G, num_background_traffic):
     combinations = [(x, y) for x, y in itertools.combinations(G.nodes, 2) if x != y]
     selected_combinations = random.sample(combinations, num_background_traffic)
     return [(source, target, nx.shortest_path(G, source, target), False) for source, target in selected_combinations]
 
 
-def generate_attack_fingerprint(G, sources, target):
+def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
     common_ttls = [32, 64, 128, 255]
     intermediary_nodes = {}  # by target
 
     # Iterate through each source
-    background_traffic = generate_background_traffic(G, num_background_traffic=10)
+    background_traffic = generate_background_traffic(G, num_background_fp)
     attack_traffic = [(source, target, nx.shortest_path(G, source, target), True) for source in sources]
 
     print("Traffic", attack_traffic + background_traffic)
@@ -208,4 +217,4 @@ def generate_attack_fingerprint(G, sources, target):
             }
             fingerprints.append(fingerprint)
 
-    return fingerprints
+    return list(map(calculate_hash, fingerprints))

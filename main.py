@@ -30,19 +30,19 @@ if __name__ == '__main__':
     # reassembler.reassemble()
 
 
-    G = create_network(num_subnets=4, participants_per_subnet=2, num_routers=4, routers_per_layer=2)
+    G = create_network(num_subnets=4, participants_per_subnet=2, routers_per_layer=2)
     draw_network(G)
 
     sources = ["P1", "P2", "P3"]
     target = "P6"
 
-    fingerprints = generate_attack_fingerprint(G, sources, target)
+    fingerprints = generate_attack_fingerprint(G, sources, target, num_background_fp=2)
     output_folder = "fingerprints"
     # Create the output folder if it does not exist
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
     for fingerprint in fingerprints:
-        output_file = os.path.join(output_folder, f"fingerprint_{fingerprint['location_name']}_{fingerprint['target_name']}.json")
+        output_file = os.path.join(output_folder, f"{fingerprint['key'][:16]}.json")
         with open(output_file, "w") as f:
             json.dump(fingerprint, f, indent=2)
