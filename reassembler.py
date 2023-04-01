@@ -6,6 +6,8 @@ from fingerprint import Fingerprint
 
 __all__ = ['Reassembler']
 
+from visualization import plot_network
+
 
 class Reassembler:
     def __init__(self, fingerprints: list[Fingerprint]):
@@ -19,21 +21,21 @@ class Reassembler:
         self.fingerprints_by_location = fp_by_loc
         self.av = pd.concat(fp.to_dataframe() for fp in fingerprints)
 
+    def find_fingerprint(self, target, location):
+        return next((item for item in self.fingerprints if (item.location == location and item.target == target)), None)
+
     def reassemble(self):
         target = self.find_target()
         if target is None:
             raise Exception("No target found")
         target = target.to_dict()
         observing_fp = self.av[
-            # TODO: Query by service, but consider that it can be None
-            # (self.av['service'] == target['service'][0]) &
             (self.av['protocol'] == target['protocol'][0]) &
-            (self.av['target'] == target['target'][0])
-            # (self.av['key'] != target['key'][0])
+            (self.av['target'] == target['target'][0]) &
+            (self.av['key'] != target['key'][0])
             ].sort_values('ttl', ascending=False)
-        plot_connections(observing_fp)
+        plot_network([1 for _ in target['source_ips'][0]], [observing_fp['nr_packets'].tolist()])
         print(observing_fp[['location', 'protocol', 'ttl']])
-        # TODO: Plot connecting line to every node which has TTL -1
 
     def find_target(self) -> pd.DataFrame:
         """

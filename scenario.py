@@ -1,6 +1,7 @@
 import hashlib
 import itertools
 import json
+from ipaddress import IPv4Address, IPv4Network
 
 import networkx as nx
 import random
@@ -97,7 +98,7 @@ def draw_network(G):
     # Draw IP address labels
     ip_labels = {node: data['ip'] for node, data in G.nodes(data=True)}
     nx.draw_networkx_labels(G, pos, labels=ip_labels, font_size=8, font_color='red', font_family='sans-serif',
-                            font_weight='bold', verticalalignment='bottom')
+                           font_weight='bold', verticalalignment='bottom')
 
     # Draw node labels
     node_labels = {node: node for node in G.nodes}
@@ -181,7 +182,7 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
     for node, node_data in intermediary_nodes.items():
         for target, target_data in node_data["targets"].items():
             ttl_dict = target_data["ttl"]
-            sources = list(target_data["sources"])
+            fp_sources = list(target_data["sources"])
 
             # Calculate the total number of packets for this intermediary node
             total_packets = sum(count for _, count in target_data["nr_packets"])
@@ -200,8 +201,8 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
                     {
                         "service": None,  # TODO: Different Services
                         "protocol": "TCP",  # TODO: Also support different protocols
-                        "source_ips": sorted([G.nodes[s]["ip"] for s in sources]),
-                        "source_ips_name": sorted(sources),
+                        "source_ips": sorted([G.nodes[s]["ip"] for s in fp_sources]),
+                        "source_ips_name": sorted(fp_sources),
                         "ttl": ttl_normalized,
                         "time_start": min_start_time.isoformat(),
                         "duration_seconds": (max_end_time - min_start_time).total_seconds(),
@@ -217,4 +218,7 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
             }
             fingerprints.append(fingerprint)
 
-    return list(map(calculate_hash, fingerprints))
+    # Filter fingerprints from attack sources, as we do not have this data in a real world scenario
+    filtered_fingerprints = [f for f in fingerprints if f['location_name'] not in sources]
+
+    return list(map(calculate_hash, filtered_fingerprints))

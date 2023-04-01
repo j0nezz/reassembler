@@ -17,7 +17,7 @@ class Fingerprint:
         df = pd.concat(pd.DataFrame(
             {'service': [av.service], 'protocol': [av.protocol], 'duration_seconds': [av.duration_seconds],
              'time_start': [av.time_start], 'nr_packets': [av.nr_packets], 'target': self.target,
-             'location': self.location, 'key': self.key, 'ttl': av.ttl.mean()}) for av in self.attack_vectors)
+             'location': self.location, 'key': self.key, 'ttl': av.ttl.mean(), 'source_ips': [av.source_ips]}) for av in self.attack_vectors)
         df["time_start"] = pd.to_datetime(df["time_start"])
         return df
 
@@ -33,6 +33,7 @@ class AttackVector:
         self.duration_seconds = data['duration_seconds']
         self.nr_packets = data['nr_packets']
         self.time_start = data['time_start']
+        self.source_ips = data['source_ips']
 
     def __str__(self):
         return "Attack Vector %s:%s" % (self.service, self.protocol)
