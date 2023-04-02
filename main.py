@@ -1,11 +1,15 @@
 import json
 import os
+import random
 from pathlib import Path
+
+from netaddr import IPNetwork
 
 from fingerprint import Fingerprint
 from reassembler import Reassembler
 from scenario import create_network, draw_network, generate_attack_fingerprint
 
+random.seed(24)
 
 def read_fingerprint(path: Path, location=""):
     # Opening JSON file
@@ -36,11 +40,15 @@ def reassemble_folder(path, infer_location_from_folder_structure=False):
 
 
 if __name__ == '__main__':
-    G = create_network(num_subnets=40, participants_per_subnet=4, routers_per_layer=5)
+    G = create_network([IPNetwork("10.0.0.0/16"), IPNetwork("72.0.0.0/8"),  IPNetwork("71.220.0.0/16")])
     draw_network(G)
 
-    sources = ["P1", "P5", "P26"]
-    target = "P30"
+    clients = [n for n, data in G.nodes(data=True) if data['client']]
+
+    sources = random.sample(clients, 5)
+    target = random.choice(clients)
+
+    print("Creating scenario with sources \n", sources, "\n and target", target)
 
     fingerprints = generate_attack_fingerprint(G, sources, target, num_background_fp=10)
     output_folder = "fingerprints"
@@ -49,7 +57,7 @@ if __name__ == '__main__':
         os.makedirs(output_folder)
 
     for fingerprint in fingerprints:
-        output_file = os.path.join(output_folder, f"{fingerprint['location_name']}_{fingerprint['target_name']}.json")
+        output_file = os.path.join(output_folder, f"{fingerprint['location']}_{fingerprint['target']}.json")
         with open(output_file, "w") as f:
             json.dump(fingerprint, f, indent=2)
 

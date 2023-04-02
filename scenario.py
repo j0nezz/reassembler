@@ -1,112 +1,75 @@
 import hashlib
 import itertools
 import json
-from ipaddress import IPv4Address, IPv4Network
-
-import networkx as nx
 import random
-from matplotlib.pyplot import figure
-from netaddr import IPNetwork
-import matplotlib.pyplot as plt
-
 from collections import defaultdict
 from datetime import datetime, timedelta
 
+import matplotlib.pyplot as plt
+import networkx as nx
+from matplotlib.pyplot import figure
+from netaddr import IPNetwork
+from networkx import Graph
+
 figure(figsize=(10, 10), dpi=120)
-random.seed(12)
 
 __all__ = ['create_network', 'draw_network', 'generate_background_traffic', 'generate_attack_fingerprint']
 
+COLORS = ["tab:purple", "tab:green", "tab:orange", "tab:blue", "tab:olive", 'gold', 'teal']
 
-def create_network(num_subnets, participants_per_subnet, routers_per_layer):
-    G = nx.Graph()
 
-    # Generate IP addresses for router subnets
-    router_subnets = [IPNetwork(f"172.16.{i + 1}.0/24") for i in range(num_subnets)]
+def create_hierarchical_subnet(root: IPNetwork, levels=3, prefixlen=4, color='tab:blue'):
+    graph = nx.Graph()
+    graph.add_node(root.ip, ip=root.ip, level=1, client=False)
 
-    # Add router nodes to the graph and initialize their IP assignment dictionary
-    router_assigned_ips = {}
-    for i in range(num_subnets):
-        router_id = f"R{i + 1}"
-        G.add_node(router_id, ip=str(router_subnets[i].ip), subnet=router_subnets[i])
-        router_assigned_ips[router_id] = set()
+    def create_subnet_nodes(parent_subnet, level):
+        if level == levels:
+            ips = random.sample(list(parent_subnet.iter_hosts()), random.randint(2, 5))
+            for p in ips:
+                graph.add_node(p, ip=p, level=level + 1, client=True)
+                graph.add_edge(parent_subnet.ip, p, color=color, level=level + 1, ms=random.uniform(0.001, 0.01))
+            return
 
-    # Generate participants and add them to the graph
-    layers = [list(range(i, i + routers_per_layer)) for i in range(0, num_subnets, routers_per_layer)]
-
-    participant_counter = 1
-    for _ in range(num_subnets * participants_per_subnet):
-        # Randomly choose a router from any layer
-        random_layer = random.choice(layers)
-        random_router_index = random.choice(random_layer)
-        random_router_id = f"R{random_router_index + 1}"
-        router_subnet = G.nodes[random_router_id]["subnet"]
-
-        # Generate a unique participant IP based on the router's subnet and assigned IPs
-        while True:
-            candidate_ip = str(router_subnet[random.randint(2, 254)])
-            if candidate_ip not in router_assigned_ips[random_router_id]:
-                participant_ip = candidate_ip
-                router_assigned_ips[random_router_id].add(participant_ip)
+        nr_nodes = random.randint(2, 5)
+        i = 0
+        for s in parent_subnet.subnet(parent_subnet.prefixlen + prefixlen):
+            i += 1
+            if i > nr_nodes:
                 break
+            s = s.next()
 
-        participant_id = f"P{participant_counter}"
-        participant_counter += 1
+            graph.add_node(s.ip, ip=s.ip, level=level + 1, client=False)
+            # weight is the simulated duration in ms
+            graph.add_edge(parent_subnet.ip, s.ip, color=color, level=level + 1, ms=random.uniform(0.001, 0.01))
+            create_subnet_nodes(s, level + 1)
 
-        G.add_node(participant_id, ip=participant_ip)
-        G.add_edge(participant_id, random_router_id, weight=random.uniform(0.001, 0.01))
+    create_subnet_nodes(root, 0)
 
-    # Add connections between routers in a hierarchical backbone structure
-
-    # Connect routers in each layer
-    for layer in layers:
-        for i, j in itertools.combinations(layer, 2):
-            G.add_edge(f"R{i + 1}", f"R{j + 1}", weight=random.uniform(0.001, 0.01))
-
-    # Connect routers between layers
-    for i in range(len(layers) - 1):
-        for j in layers[i]:
-            for k in layers[i + 1]:
-                G.add_edge(f"R{j + 1}", f"R{k + 1}", weight=random.uniform(0.001, 0.01))
-
-    return G
+    return graph
 
 
-def draw_network(G):
-    pos = nx.spring_layout(G, seed=12)
+def create_network(subnets: list[IPNetwork]):
+    subgraphs = [create_hierarchical_subnet(s, levels=random.randint(1, 3), color=COLORS[i]) for i, s in
+                 enumerate(subnets)]
 
-    # Separate routers and participants
-    router_nodes = [n for n in G.nodes if n.startswith("R")]
-    participant_nodes = [n for n in G.nodes if n.startswith("P")]
+    F = nx.compose_all(subgraphs)
 
-    # Draw nodes
-    nx.draw_networkx_nodes(G, pos, nodelist=router_nodes, node_color='orange', node_size=200, label="Routers")
-    nx.draw_networkx_nodes(G, pos, nodelist=participant_nodes, node_color='lightblue', node_size=150,
-                           label="Participants")
+    edges = [(a.ip, b.ip, {'color': 'r', 'level': 0, 'ms': random.uniform(0.001, 0.01)}) for a, b in
+             itertools.combinations(subnets, 2)]
+    F.add_edges_from(edges)
 
-    # Draw edges
-    nx.draw_networkx_edges(G, pos)
-    # Add the edge labels
-    edge_labels_raw = nx.get_edge_attributes(G, "weight")
-    edge_labels = {k: f"{v * 1000:.2f} ms" for k, v in edge_labels_raw.items()}
-    pos_edge_labels = {}
-    for key, value in pos.items():
-        if key in edge_labels:
-            pos_edge_labels[key] = value
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=8)
+    return F
 
-    # Draw IP address labels
-    ip_labels = {node: data['ip'] for node, data in G.nodes(data=True)}
-    nx.draw_networkx_labels(G, pos, labels=ip_labels, font_size=8, font_color='red', font_family='sans-serif',
-                           font_weight='bold', verticalalignment='bottom')
 
-    # Draw node labels
-    node_labels = {node: node for node in G.nodes}
-    label_pos = {k: [v[0], v[1] + 0.05] for k, v in pos.items()}
-    nx.draw_networkx_labels(G, label_pos, labels=node_labels, font_size=10, font_color='blue', font_family='sans-serif',
-                            font_weight='bold')
+def draw_network(G: Graph):
+    edge_colors = nx.get_edge_attributes(G, 'color').values()
+    node_colors = ['brown' if data['client'] else 'dimgrey' for n, data in G.nodes(data=True)]
 
-    plt.axis('off')
+    edge_widths = [1.5 if level == 0 else 1 / level for level in nx.get_edge_attributes(G, 'level').values()]
+    node_sizes = [40 - level * 7 for level in nx.get_node_attributes(G, 'level').values()]
+
+    nx.draw(G, with_labels=False, font_size=5, node_size=node_sizes, width=edge_widths, edge_color=edge_colors,
+            node_color=node_colors)
     plt.show()
 
 
@@ -164,7 +127,7 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
 
             if i > 0:
                 prev_node = path[i - 1]
-                edge_weight = G[prev_node][node]['weight']
+                edge_weight = G[prev_node][node]['ms']
                 accumulated_weight += edge_weight
 
             intermediary_nodes[node]["targets"][target]["ttl"][ttl] += nr_packets
@@ -201,8 +164,7 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
                     {
                         "service": None,  # TODO: Different Services
                         "protocol": "TCP",  # TODO: Also support different protocols
-                        "source_ips": sorted([G.nodes[s]["ip"] for s in fp_sources]),
-                        "source_ips_name": sorted(fp_sources),
+                        "source_ips": sorted([str(G.nodes[s]["ip"]) for s in fp_sources]),
                         "ttl": ttl_normalized,
                         "time_start": min_start_time.isoformat(),
                         "duration_seconds": (max_end_time - min_start_time).total_seconds(),
@@ -211,14 +173,13 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
 
                     }
                 ],
-                "target": G.nodes[target]["ip"],
-                "target_name": target,
-                "location": G.nodes[node]["ip"],
-                "location_name": node
+                "target": str(G.nodes[target]["ip"]),
+                "location": str(G.nodes[node]["ip"]),
             }
             fingerprints.append(fingerprint)
 
+    str_sources = list(map(str, sources))
     # Filter fingerprints from attack sources, as we do not have this data in a real world scenario
-    filtered_fingerprints = [f for f in fingerprints if f['location_name'] not in sources]
+    filtered_fingerprints = [f for f in fingerprints if f['location'] not in str_sources]
 
     return list(map(calculate_hash, filtered_fingerprints))
