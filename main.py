@@ -40,12 +40,16 @@ def reassemble_folder(path, infer_location_from_folder_structure=False):
 
 
 if __name__ == '__main__':
-    G = create_network([IPNetwork("10.0.0.0/16"), IPNetwork("72.0.0.0/8"),  IPNetwork("71.220.0.0/16")])
+    #  IPNetwork("72.0.0.0/8"),  IPNetwork("71.220.0.0/16")
+    G = create_network([IPNetwork("10.0.0.0/16")])
     draw_network(G)
 
     clients = [n for n, data in G.nodes(data=True) if data['client']]
+    spoofed = [n for n, data in G.nodes(data=True) if data['spoofed']]
 
+    print(len(spoofed), G.nodes[spoofed[1]])
     sources = random.sample(clients, 5)
+    # TODO: Make sure that target cannot be spoofed
     target = random.choice(clients)
 
     print("Creating scenario with sources \n", sources, "\n and target", target)
