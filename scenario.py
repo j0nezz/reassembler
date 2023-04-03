@@ -136,11 +136,13 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
             if target not in intermediary_nodes[node]["targets"]:
                 intermediary_nodes[node]["targets"][target] = {
                     "ttl": defaultdict(int),
+                    "ttl_by_source": defaultdict(int),
                     "sources": set(),
                     "sources_real": set(),
                     "time_start": [],
                     "duration_seconds": [],
                     "nr_packets": [],
+                    "nr_packets_by_source": defaultdict(int),
                     "nr_megabytes": [],
                 }
 
@@ -151,6 +153,7 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
 
             # TODO: if spoofed, add the spoofed IP address to the fingerprint
             intermediary_nodes[node]["targets"][target]["ttl"][ttl] += nr_packets
+            intermediary_nodes[node]["targets"][target]["ttl_by_source"][str(source)] = ttl
             intermediary_nodes[node]["targets"][target]["sources_real"].add(source)
             # includes spoofed IPs
             intermediary_nodes[node]["targets"][target]["sources"].add(
@@ -160,6 +163,7 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
             intermediary_nodes[node]["targets"][target]["duration_seconds"].append(duration)
             intermediary_nodes[node]["targets"][target]["nr_packets"].append(
                 (get_real_or_spoofed_ip(G.nodes(data=True)[source]), nr_packets))
+            intermediary_nodes[node]["targets"][target]["nr_packets_by_source"][str(get_real_or_spoofed_ip(G.nodes(data=True)[source]))] = nr_packets
             intermediary_nodes[node]["targets"][target]["nr_megabytes"].append(
                 (get_real_or_spoofed_ip(G.nodes(data=True)[source]), nr_megabytes))
 
@@ -193,12 +197,10 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
                         "source_ips": sorted([str(s) for s in fp_sources]),
                         "source_ips_real": sorted([str(s) for s in fp_sources_real]),
                         "ttl": ttl_normalized,
-                        # TODO TTL map
-                        "ttl_by_source": None,
+                        "ttl_by_source": target_data['ttl_by_source'],
                         "time_start": min_start_time.isoformat(),
                         "duration_seconds": (max_end_time - min_start_time).total_seconds(),
-                        # TODO nr_packets map
-                        "nr_packets_by_source": None,
+                        "nr_packets_by_source": target_data['nr_packets_by_source'],
                         "nr_packets": sum(n for _, n in target_data["nr_packets"]),
                         "nr_megabytes": sum(n for _, n in target_data["nr_megabytes"]),
 

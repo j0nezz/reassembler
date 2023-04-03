@@ -41,11 +41,11 @@ def reassemble_folder(path, infer_location_from_folder_structure=False):
 
 if __name__ == '__main__':
     #  IPNetwork("72.0.0.0/8"),  IPNetwork("71.220.0.0/16")
-    G = create_network([IPNetwork("10.0.0.0/16")], max_clients=2)
+    G = create_network([IPNetwork("10.0.0.0/16")], max_clients=4)
     draw_network(G)
 
     clients = [n for n, data in G.nodes(data=True) if data['client']]
-    sources = random.sample(clients, 1)
+    sources = random.sample(clients, 2)
     possible_targets = [n for n, data in G.nodes(data=True) if data['client'] and not data.get('spoofed', False) and not n in sources]
     target = random.choice(possible_targets)
 
