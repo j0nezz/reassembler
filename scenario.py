@@ -24,7 +24,7 @@ def create_hierarchical_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clien
 
     def create_subnet_nodes(parent_subnet, level):
         if level == levels:
-            ips = random.sample(list(parent_subnet.iter_hosts()), random.randint(2, max_clients))
+            ips = random.sample(list(parent_subnet.iter_hosts()), random.randint(1, max_clients))
             for p in ips:
                 graph.add_node(p, ip=p, level=level + 1,
                                client=True, spoofed=bool(random.getrandbits(1)),
@@ -52,7 +52,7 @@ def create_hierarchical_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clien
 
 def create_network(subnets: list[IPNetwork], max_levels=3, max_clients=5):
     subgraphs = [create_hierarchical_subnet(s, levels=random.randint(1, max_levels), color=COLORS[i],
-                                            max_clients=random.randint(1, max_clients)) for i, s in
+                                            max_clients=random.randint(2, max_clients)) for i, s in
                  enumerate(subnets)]
 
     F = nx.compose_all(subgraphs)
@@ -138,7 +138,7 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
                     "ttl": defaultdict(int),
                     "ttl_by_source": defaultdict(int),
                     "sources": set(),
-                    "sources_real": set(),
+                    "sources_real": defaultdict(str),
                     "time_start": [],
                     "duration_seconds": [],
                     "nr_packets": [],
@@ -150,12 +150,11 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
                 prev_node = path[i - 1]
                 edge_weight = G[prev_node][node]['ms']
                 accumulated_weight += edge_weight
-
+            spoofed_source = get_real_or_spoofed_ip(G.nodes(data=True)[source])
             # TODO: if spoofed, add the spoofed IP address to the fingerprint
             intermediary_nodes[node]["targets"][target]["ttl"][ttl] += nr_packets
-            intermediary_nodes[node]["targets"][target]["ttl_by_source"][str(source)] = ttl
-            intermediary_nodes[node]["targets"][target]["sources_real"].add(source)
-            # includes spoofed IPs
+            intermediary_nodes[node]["targets"][target]["ttl_by_source"][str(spoofed_source)] = ttl
+            intermediary_nodes[node]["targets"][target]["sources_real"][str(spoofed_source)] = str(source)
             intermediary_nodes[node]["targets"][target]["sources"].add(
                 get_real_or_spoofed_ip(G.nodes(data=True)[source]))
             intermediary_nodes[node]["targets"][target]["time_start"].append(
@@ -175,7 +174,7 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
         for target, target_data in node_data["targets"].items():
             ttl_dict = target_data["ttl"]
             fp_sources = list(target_data["sources"])
-            fp_sources_real = list(target_data["sources_real"])
+
 
             # Calculate the total number of packets for this intermediary node
             total_packets = sum(count for _, count in target_data["nr_packets"])
@@ -195,7 +194,7 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
                         "service": None,  # TODO: Different Services
                         "protocol": "TCP",  # TODO: Also support different protocols
                         "source_ips": sorted([str(s) for s in fp_sources]),
-                        "source_ips_real": sorted([str(s) for s in fp_sources_real]),
+                        "source_ips_real": target_data["sources_real"],
                         "ttl": ttl_normalized,
                         "ttl_by_source": target_data['ttl_by_source'],
                         "time_start": min_start_time.isoformat(),
