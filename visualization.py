@@ -61,5 +61,7 @@ def plot_network(sources_data, middle_layers_data):
 
     ax.set_aspect('equal')
     ax.spines[['right', 'top']].set_visible(False)
+    ax.axes.xaxis.set_visible(False)
+    ax.axes.yaxis.set_visible(False)
     plt.show()
 
