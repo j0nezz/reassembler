@@ -7,9 +7,8 @@ __all__ = ['plot_network']
 
 
 def plot_network(sources_data, middle_layers_data):
-    print("Plot network", sources_data, middle_layers_data)
     # Set the random seed for reproducibility
-    np.random.seed(0)
+    np.random.seed(12)
 
     # Create the sources (blue points)
     num_sources = len(sources_data)
@@ -23,7 +22,7 @@ def plot_network(sources_data, middle_layers_data):
 
     # Plot the points
     fig, ax = plt.subplots()
-    ax.scatter(sources_x, sources_y, c='blue', s=sources_sizes, alpha=0.75, zorder=10)
+    ax.scatter(sources_x, sources_y, cmap='hot', c=sources_data, s=sources_sizes, alpha=0.75, zorder=10)
     ax.scatter(target_x, target_y, c='red', s=200, alpha=0.75, zorder=10)
 
     # Plot the middle layers (intermediate nodes)
