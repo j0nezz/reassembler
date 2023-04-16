@@ -11,7 +11,7 @@ from matplotlib.pyplot import figure
 from netaddr import IPNetwork, IPAddress
 from networkx import Graph
 
-figure(figsize=(10, 10), dpi=120)
+figure(figsize=(12, 8), dpi=120)
 
 __all__ = ['create_network', 'draw_network', 'generate_background_traffic', 'generate_attack_fingerprint']
 
@@ -55,7 +55,7 @@ def create_hierarchical_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clien
 
 def create_network(subnets: list[IPNetwork], max_levels=3, max_clients=5):
     subgraphs = [create_hierarchical_subnet(s, levels=random.randint(1, max_levels), color=COLORS[i],
-                                            max_clients=random.randint(2, max_clients)) for i, s in
+                                            max_clients=random.randint(2, max_clients), prefixlen=3) for i, s in
                  enumerate(subnets)]
 
     F = nx.compose_all(subgraphs)
@@ -80,10 +80,10 @@ def draw_network(G: Graph):
     node_colors = [get_node_color(data) for _, data in G.nodes(data=True)]
     labels = {n: str(data['ip']) for n, data in G.nodes(data=True)}
 
-    edge_widths = [1.5 if level == 0 else 1 / level for level in nx.get_edge_attributes(G, 'level').values()]
+    edge_widths = [2 if level == 0 else 1.5 / level for level in nx.get_edge_attributes(G, 'level').values()]
     node_sizes = [40 - level * 7 for level in nx.get_node_attributes(G, 'level').values()]
 
-    nx.draw(G, with_labels=True, font_size=10, node_size=node_sizes, width=edge_widths, edge_color=edge_colors,
+    nx.draw(G, with_labels=False, font_size=10, node_size=node_sizes, width=edge_widths, edge_color=edge_colors,
             node_color=node_colors, labels=labels)
     plt.show()
 
@@ -97,7 +97,7 @@ def calculate_hash(data):
 def generate_background_traffic(G, num_background_traffic):
     combinations = [(x, y) for x, y in itertools.combinations(G.nodes, 2) if x != y]
     selected_combinations = random.sample(combinations, num_background_traffic)
-    return [(source, target, nx.shortest_path(G, source, target), False) for source, target in selected_combinations]
+    return [(source, target, nx.shortest_path(G, source, target, weight='ms'), False) for source, target in selected_combinations]
 
 
 def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
@@ -106,7 +106,7 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
 
     # Iterate through each source
     background_traffic = generate_background_traffic(G, num_background_fp)
-    attack_traffic = [(source, target, nx.shortest_path(G, source, target), True) for source in sources]
+    attack_traffic = [(source, target, nx.shortest_path(G, source, target, weight='ms'), True) for source in sources]
 
     print("Attack Traffic", attack_traffic)
     print("Background Traffic", background_traffic)
