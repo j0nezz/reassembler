@@ -11,7 +11,7 @@ from scenario import create_network, draw_network, generate_attack_fingerprint
 random.seed(12)
 
 if __name__ == '__main__':
-    G = create_network([IPNetwork("10.0.0.0/16"), IPNetwork("55.0.0.0/8"),  IPNetwork("71.220.0.0/16")],  max_clients=5)
+    G = create_network([IPNetwork("10.0.0.0/16"), IPNetwork("55.0.0.0/8"),  IPNetwork("71.220.0.0/16"), IPNetwork("72.220.0.0/16"), IPNetwork("73.220.0.0/16"), IPNetwork("74.220.0.0/16"), IPNetwork("75.220.0.0/16")],  max_clients=5)
     draw_network(G)
 
     clients = [n for n, data in G.nodes(data=True) if data['client']]

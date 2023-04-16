@@ -59,9 +59,17 @@ def create_network(subnets: list[IPNetwork], max_levels=3, max_clients=5):
                  enumerate(subnets)]
 
     F = nx.compose_all(subgraphs)
+    n = len(subnets)
 
-    edges = [(a.ip, b.ip, {'color': 'r', 'level': 0, 'ms': random.uniform(0.001, 0.01)}) for a, b in
-             itertools.combinations(subnets, 2)]
+    # Ring topology
+    edges = [(subnets[i].ip, subnets[(i+1)%n].ip, {'color': 'r', 'level': 0, 'ms': random.uniform(0.001, 0.01)}) for i in range(n)]
+
+    # Add random connections to create a partial mesh
+    m = round(n/2)
+    partial_mesh = [(u.ip, v.ip, {'color': 'r', 'level': 0, 'ms': random.uniform(0.001, 0.01)}) for u,v in random.sample(list(itertools.combinations(subnets, 2)), m)]
+
+    edges.extend(partial_mesh)
+
     F.add_edges_from(edges)
 
     return F
