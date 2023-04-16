@@ -56,6 +56,7 @@ class Reassembler:
 
         sources = entries_at_target['ttl'].apply(lambda x: len(x))
         intermediate_nodes = observing_fp.groupby('location').agg({'nr_packets': 'sum', 'distance_to_target': 'mean'})
+        intermediate_nodes['distance_to_target'] = intermediate_nodes['distance_to_target'].round()
         bins = intermediate_nodes.groupby('distance_to_target')['nr_packets'].apply(list)
 
         plot_network(sources.tolist(), bins.sort_index(ascending=False).tolist())
