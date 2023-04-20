@@ -10,7 +10,7 @@ def plot_network(sources_data, middle_layers_data):
     # Set the random seed for reproducibility
     np.random.seed(12)
 
-    # Create the sources (blue points)
+    # Create the sources
     num_sources = len(sources_data)
     sources_x = np.zeros(num_sources)
     sources_y = np.linspace(0, 1, num_sources)

@@ -15,7 +15,7 @@ if __name__ == '__main__':
     draw_network(G)
 
     clients = [n for n, data in G.nodes(data=True) if data['client']]
-    sources = random.sample(clients, 7)
+    sources = random.sample(clients, 10)
     possible_targets = [n for n, data in G.nodes(data=True) if data['client'] and not data.get('spoofed', False) and not n in sources]
     target = random.choice(possible_targets)
 

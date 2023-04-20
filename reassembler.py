@@ -1,3 +1,6 @@
+import json
+
+import pandas as pd
 from pandas import DataFrame
 
 __all__ = ['Reassembler']
@@ -42,12 +45,15 @@ class Reassembler:
     def reassemble(self):
         target, target_key = self.find_target()
 
-        entries_at_target = self.fps[self.fps['location'] == target]
-        ttls_at_target = entries_at_target[['source_ip', 'ttl']]
+        entries_at_target = self.fps[self.fps['location'] == target].copy()
+        entries_at_target['ttl_count'] = entries_at_target['ttl'].apply(lambda x: len(x))
+        entries_at_target['time_start'] = pd.to_datetime(entries_at_target['time_start'])
+        entries_at_target['time_end'] = entries_at_target['time_start'] + pd.to_timedelta(entries_at_target['duration_seconds'], unit='s')
+        ttls_at_target = entries_at_target[['source_ip', 'ttl']].copy()
         ttls_at_target.columns = ['source_ip', 'ttl_on_target']
         ttls_at_target['hops_on_target'] = ttls_at_target['ttl_on_target'].apply(calculate_hops)
 
-        observing_fp = self.fps[self.fps['target'] == target]
+        observing_fp = self.fps[(self.fps['target'] == target) & (self.fps['location'] != target)].copy()
         observing_fp['hops'] = observing_fp['ttl'].apply(calculate_hops)
         observing_fp = observing_fp.merge(ttls_at_target, how='left', on='source_ip')
         observing_fp['distance_to_target'] = observing_fp.apply(calculate_distance_to_target, axis=1)
@@ -61,11 +67,37 @@ class Reassembler:
 
         plot_network(sources.tolist(), bins.sort_index(ascending=False).tolist())
 
+        pct_spoofed = len(entries_at_target[entries_at_target['ttl_count'] > 1]) / len(entries_at_target)
+
+        summary = {
+            'attack': {
+                'start_time': entries_at_target['time_start'].min().isoformat(),
+                'end_time': entries_at_target['time_end'].max().isoformat()
+            },
+            'target': {
+                'ip': target
+            },
+            'intermediate_nodes': {
+                'nr_intermediate_nodes': len(intermediate_nodes),
+                'key_nodes': intermediate_nodes.sort_values('nr_packets', ascending=False).head(5).sort_values('distance_to_target').to_dict('index')
+            },
+            'sources': {
+                'nr_sources': len(sources),
+                'pct_spoofed': pct_spoofed
+            }
+        }
+        self.save_to_json(summary, 'summary.json')
+
     def find_target(self) -> tuple[str, str]:
         """
         Find the overall target of the attack by comparing target and location in each fingerprint
         """
+        # TODO: Possibly Better detection or manual way to define target
         possible_targets = self.fps[self.fps['target'] == self.fps['location']].groupby(['location', 'target']).agg(
             {'nr_packets': 'sum', 'key': 'min'}).sort_values('nr_packets', ascending=False)
 
         return possible_targets.index[0][0], possible_targets.iloc[0]['key']
+
+    def save_to_json(self, data, filename='data.json'):
+        with open(filename, "w") as f:
+            json.dump(data, f, indent=2)
