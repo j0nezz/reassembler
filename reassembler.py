@@ -18,7 +18,7 @@ def calculate_hops(ttl_list):
     return hops
 
 
-def calculate_distance_to_target(row):
+def calculate_hops_to_target(row):
     ttl = row['ttl']
     ttl_on_target = row['ttl_on_target']
 
@@ -57,15 +57,15 @@ class Reassembler:
         observing_fp = self.fps[(self.fps['target'] == target) & (self.fps['location'] != target)].copy()
         observing_fp['hops'] = observing_fp['ttl'].apply(calculate_hops)
         observing_fp = observing_fp.merge(ttls_at_target, how='left', on='source_ip')
-        observing_fp['distance_to_target'] = observing_fp.apply(calculate_distance_to_target, axis=1)
+        observing_fp['hops_to_target'] = observing_fp.apply(calculate_hops_to_target, axis=1)
         print(observing_fp[['location', 'source_ip', 'ttl', 'detection_threshold']].sort_values(
             'location'))
 
         sources = entries_at_target['ttl'].apply(lambda x: len(x))
 
-        intermediate_nodes = observing_fp.groupby('location').agg({'nr_packets': 'sum', 'distance_to_target': 'mean', 'detection_threshold':'min'})
-        intermediate_nodes['distance_to_target'] = intermediate_nodes['distance_to_target'].round()
-        bins = intermediate_nodes.groupby('distance_to_target')['nr_packets'].apply(list)
+        intermediate_nodes = observing_fp.groupby('location').agg({'nr_packets': 'sum', 'hops_to_target': 'mean', 'detection_threshold':'min'})
+        intermediate_nodes['hops_to_target'] = intermediate_nodes['hops_to_target'].round()
+        bins = intermediate_nodes.groupby('hops_to_target')['nr_packets'].apply(list)
 
         plot_network(sources.tolist(), bins.sort_index(ascending=False).tolist())
 
@@ -80,7 +80,7 @@ class Reassembler:
             },
             'intermediate_nodes': {
                 'nr_intermediate_nodes': len(intermediate_nodes),
-                'key_nodes': intermediate_nodes.sort_values('nr_packets', ascending=False).head(20).sort_values('distance_to_target').to_dict('index')
+                'key_nodes': intermediate_nodes.sort_values('nr_packets', ascending=False).head(20).sort_values('hops_to_target').to_dict('index')
             },
             'sources': {
                 'nr_sources': len(sources),
