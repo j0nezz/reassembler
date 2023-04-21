@@ -21,7 +21,7 @@ if __name__ == '__main__':
 
     print("Creating scenario with sources \n", [G.nodes(data=True)[s].get('spoofed_ip', s) for s in sources], "\n and target", target)
 
-    fingerprints = generate_attack_fingerprint(G, sources, target, num_background_fp=0)
+    fingerprints = generate_attack_fingerprint(G, sources, target, num_background_fp=100)
     output_folder = "fingerprints"
     # Create the output folder if it does not exist
     if not os.path.exists(output_folder):

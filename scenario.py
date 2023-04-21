@@ -125,7 +125,7 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
         # Generate random start time and duration for the attack
         start_time = datetime.utcfromtimestamp(0) + timedelta(seconds=random.uniform(0, 10))
         duration = random.uniform(60, 180) if is_attack else random.uniform(10, 70)
-        nr_packets = round(random.uniform(10e3, 10e6)) if is_attack else round(random.uniform(10, 10e4))
+        nr_packets = round(random.uniform(10e3, 10e6)) if is_attack else round(random.uniform(10e2, 10e5))
         nr_megabytes = round(nr_packets / random.uniform(1000, 5000), 2)
 
         accumulated_weight = 0
@@ -190,11 +190,14 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
     # Generate attack fingerprints for each intermediary node
     fingerprints = []
     for node, node_data in intermediary_nodes.items():
+        # Calculate total packets through node
+        total_packets_to_node = sum(sum(n for _, n in item["nr_packets"]) for item in node_data["targets"].values())
         for target, target_data in node_data["targets"].items():
             ttl_dict = target_data["ttl"]
             fp_sources = list(target_data["sources"])
 
             # Calculate the total number of packets for this intermediary node
+            # TODO rename
             total_packets = sum(count for _, count in target_data["nr_packets"])
 
             # Normalize the TTL values
@@ -205,7 +208,7 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
             max_end_time = max(
                 t1 + timedelta(seconds=t2) for t1, t2 in
                 zip(target_data["time_start"], target_data["duration_seconds"]))
-
+            nr_packets_to_target = sum(n for _, n in target_data["nr_packets"])
             fingerprint = {
                 "attack_vectors": [
                     {
@@ -218,8 +221,9 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
                         "time_start": min_start_time.isoformat(),
                         "duration_seconds": (max_end_time - min_start_time).total_seconds(),
                         "nr_packets_by_source": target_data['nr_packets_by_source'],
-                        "nr_packets": sum(n for _, n in target_data["nr_packets"]),
+                        "nr_packets": nr_packets_to_target,
                         "nr_megabytes": sum(n for _, n in target_data["nr_megabytes"]),
+                        "detection_threshold": nr_packets_to_target / total_packets_to_node
 
                     }
                 ],
