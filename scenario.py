@@ -223,7 +223,7 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
                         "nr_packets_by_source": target_data['nr_packets_by_source'],
                         "nr_packets": nr_packets_to_target,
                         "nr_megabytes": sum(n for _, n in target_data["nr_megabytes"]),
-                        "detection_threshold": nr_packets_to_target / total_packets_to_node
+                        "detection_threshold": nr_packets_to_target / total_packets_to_node,
 
                     }
                 ],
