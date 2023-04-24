@@ -42,16 +42,16 @@ def calculate_hops_to_target(row):
 class Reassembler:
     def __init__(self, fingerprints: DataFrame):
         self.fps = fingerprints
+        self.fps['time_start'] = pd.to_datetime(self.fps['time_start'])
+        self.fps['time_end'] = self.fps['time_start'] + pd.to_timedelta(self.fps['duration_seconds'], unit='s')
 
     def reassemble(self):
         target, target_key = self.find_target()
 
         entries_at_target = self.fps[(self.fps['location'] == target) & (self.fps['target'] == target)].copy()
         entries_at_target['ttl_count'] = entries_at_target['ttl'].apply(lambda x: len(x))
-        entries_at_target['time_start'] = pd.to_datetime(entries_at_target['time_start'])
-        entries_at_target['time_end'] = entries_at_target['time_start'] + pd.to_timedelta(entries_at_target['duration_seconds'], unit='s')
         total_attack_size_at_target = entries_at_target['nr_packets'].sum()
-        print("Entries at Target", entries_at_target[['source_ip', 'nr_packets', 'target', 'location']])
+        print("Entries at Target", entries_at_target[['source_ip', 'nr_packets', 'target', 'duration_seconds']])
 
         ttls_at_target = entries_at_target[['source_ip', 'ttl']].copy()
         ttls_at_target.columns = ['source_ip', 'ttl_on_target']
@@ -66,9 +66,12 @@ class Reassembler:
 
         sources = entries_at_target['ttl'].apply(lambda x: len(x))
 
-        intermediate_nodes = observing_fp.groupby('location').agg({'nr_packets': 'sum', 'hops_to_target': 'mean', 'detection_threshold':'min'})
+        intermediate_nodes = observing_fp.groupby('location').agg({'nr_packets': 'sum', 'hops_to_target': 'mean', 'detection_threshold':'min', 'time_start': 'min', 'time_end': 'max'})
         intermediate_nodes['hops_to_target'] = intermediate_nodes['hops_to_target'].round()
         intermediate_nodes['fraction_of_total_attack'] = intermediate_nodes['nr_packets'] / total_attack_size_at_target
+        intermediate_nodes['duration_seconds'] = (intermediate_nodes['time_end'] - intermediate_nodes['time_start']).dt.total_seconds()
+        intermediate_nodes = intermediate_nodes.applymap(lambda x: x.isoformat() if isinstance(x, pd.Timestamp) else x)
+
         bins = intermediate_nodes.groupby('hops_to_target')['nr_packets'].apply(list)
 
         plot_network(sources.tolist(), bins.sort_index(ascending=False).tolist())
@@ -77,7 +80,8 @@ class Reassembler:
         summary = {
             'attack': {
                 'start_time': entries_at_target['time_start'].min().isoformat(),
-                'end_time': entries_at_target['time_end'].max().isoformat()
+                'end_time': entries_at_target['time_end'].max().isoformat(),
+                'duration_seconds': entries_at_target['duration_seconds'].mean()
             },
             'target': {
                 'ip': target
