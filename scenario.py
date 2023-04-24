@@ -18,7 +18,7 @@ __all__ = ['create_network', 'draw_network', 'generate_background_traffic', 'gen
 COLORS = ["tab:purple", "tab:green", "tab:orange", "tab:blue", "tab:olive", 'gold', 'teal']
 
 random.seed(12)
-SPOOFED_IP_POOL = [IPAddress(random.randint(0, 2 ** 32)) for i in range(100)]
+SPOOFED_IP_POOL = [IPAddress(random.randint(0, 2 ** 32)) for i in range(50)]
 
 
 def create_hierarchical_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clients=5, color='tab:blue'):
@@ -108,7 +108,7 @@ def generate_background_traffic(G, num_background_traffic, target, bg_to_target=
     unrelated_traffic = [(x, y) for x, y in itertools.combinations(G.nodes, 2) if x != y and y != target]
     unrelated_traffic_combinations = random.sample(unrelated_traffic, int(num_background_traffic * (1 - bg_to_target)))
 
-    traffic_to_target = [(x, y) for x, y in itertools.combinations(G.nodes, 2) if x != y and y == target]
+    traffic_to_target = [(n, target) for n, data in G.nodes(data=True) if not data.get('spoofed', False)]
     traffic_to_target_combinations = random.sample(traffic_to_target, int(num_background_traffic * bg_to_target))
     return [(source, target, nx.shortest_path(G, source, target, weight='ms'), False) for source, target in
             unrelated_traffic_combinations + traffic_to_target_combinations]

@@ -66,15 +66,12 @@ class Reassembler:
 
         sources = entries_at_target['ttl'].apply(lambda x: len(x))
 
-        intermediate_nodes = observing_fp.groupby('location').agg({'nr_packets': 'sum', 'hops_to_target': 'mean', 'detection_threshold':'min', 'time_start': 'min', 'time_end': 'max'})
+        intermediate_nodes = observing_fp.groupby('location').agg({'nr_packets': 'sum', 'hops_to_target': 'mean', 'detection_threshold':'min', 'time_start': 'min', 'time_end': 'max'}).copy()
         intermediate_nodes['hops_to_target'] = intermediate_nodes['hops_to_target'].round()
         intermediate_nodes['fraction_of_total_attack'] = intermediate_nodes['nr_packets'] / total_attack_size_at_target
         intermediate_nodes['duration_seconds'] = (intermediate_nodes['time_end'] - intermediate_nodes['time_start']).dt.total_seconds()
         intermediate_nodes = intermediate_nodes.applymap(lambda x: x.isoformat() if isinstance(x, pd.Timestamp) else x)
-
-        bins = intermediate_nodes.groupby('hops_to_target')['nr_packets'].apply(list)
-
-        plot_network(sources.tolist(), bins.sort_index(ascending=False).tolist())
+        filtered_intermediate_nodes = intermediate_nodes[intermediate_nodes['duration_seconds'] > 60]
 
         pct_spoofed = len(entries_at_target[entries_at_target['ttl_count'] > 1]) / len(entries_at_target)
         summary = {
@@ -87,8 +84,9 @@ class Reassembler:
                 'ip': target
             },
             'intermediate_nodes': {
-                'nr_intermediate_nodes': len(intermediate_nodes),
-                'key_nodes': intermediate_nodes.sort_values('nr_packets', ascending=False).head(20).sort_values('hops_to_target').to_dict('index')
+                'discarded_intermediate_nodes': len(intermediate_nodes)- len(filtered_intermediate_nodes),
+                'nr_intermediate_nodes': len(filtered_intermediate_nodes),
+                'key_nodes': filtered_intermediate_nodes.sort_values('nr_packets', ascending=False).sort_values('hops_to_target').to_dict('index')
             },
             'sources': {
                 'nr_sources': len(sources),
@@ -96,6 +94,9 @@ class Reassembler:
             }
         }
         self.save_to_json(summary, 'summary.json')
+
+        bins = filtered_intermediate_nodes.groupby('hops_to_target')['nr_packets'].apply(list)
+        plot_network(sources.tolist(), bins.sort_index(ascending=False).tolist())
 
     def find_target(self) -> tuple[str, str]:
         """
