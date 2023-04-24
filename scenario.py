@@ -18,7 +18,7 @@ __all__ = ['create_network', 'draw_network', 'generate_background_traffic', 'gen
 COLORS = ["tab:purple", "tab:green", "tab:orange", "tab:blue", "tab:olive", 'gold', 'teal']
 
 random.seed(12)
-SPOOFED_IP_POOL = [IPAddress(random.randint(0, 2 ** 32)) for i in range(50)]
+SPOOFED_IP_POOL = [IPAddress(random.randint(0, 2 ** 32)) for i in range(100)]
 
 
 def create_hierarchical_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clients=5, color='tab:blue'):
@@ -62,11 +62,13 @@ def create_network(subnets: list[IPNetwork], max_levels=3, max_clients=5):
     n = len(subnets)
 
     # Ring topology
-    edges = [(subnets[i].ip, subnets[(i+1)%n].ip, {'color': 'r', 'level': 0, 'ms': random.uniform(0.001, 0.01)}) for i in range(n)]
+    edges = [(subnets[i].ip, subnets[(i + 1) % n].ip, {'color': 'r', 'level': 0, 'ms': random.uniform(0.001, 0.01)}) for
+             i in range(n)]
 
     # Add random connections to create a partial mesh
-    m = round(n/2)
-    partial_mesh = [(u.ip, v.ip, {'color': 'r', 'level': 0, 'ms': random.uniform(0.001, 0.01)}) for u,v in random.sample(list(itertools.combinations(subnets, 2)), m)]
+    m = round(n / 2)
+    partial_mesh = [(u.ip, v.ip, {'color': 'r', 'level': 0, 'ms': random.uniform(0.001, 0.01)}) for u, v in
+                    random.sample(list(itertools.combinations(subnets, 2)), m)]
 
     edges.extend(partial_mesh)
 
@@ -102,19 +104,24 @@ def calculate_hash(data):
     return data
 
 
-def generate_background_traffic(G, num_background_traffic):
-    combinations = [(x, y) for x, y in itertools.combinations(G.nodes, 2) if x != y]
-    selected_combinations = random.sample(combinations, num_background_traffic)
-    return [(source, target, nx.shortest_path(G, source, target, weight='ms'), False) for source, target in selected_combinations]
+def generate_background_traffic(G, num_background_traffic, target, bg_to_target=0.2):
+    unrelated_traffic = [(x, y) for x, y in itertools.combinations(G.nodes, 2) if x != y and y != target]
+    unrelated_traffic_combinations = random.sample(unrelated_traffic, int(num_background_traffic * (1 - bg_to_target)))
+
+    traffic_to_target = [(x, y) for x, y in itertools.combinations(G.nodes, 2) if x != y and y == target]
+    traffic_to_target_combinations = random.sample(traffic_to_target, int(num_background_traffic * bg_to_target))
+    return [(source, target, nx.shortest_path(G, source, target, weight='ms'), False) for source, target in
+            unrelated_traffic_combinations + traffic_to_target_combinations]
 
 
-def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
+def generate_attack_fingerprint(G, sources, attack_target, num_background_fp=10):
     common_ttls = [32, 64, 128, 255]
     intermediary_nodes = {}  # by target
 
     # Iterate through each source
-    background_traffic = generate_background_traffic(G, num_background_fp)
-    attack_traffic = [(source, target, nx.shortest_path(G, source, target, weight='ms'), True) for source in sources]
+    background_traffic = generate_background_traffic(G, num_background_fp, attack_target)
+    attack_traffic = [(source, attack_target, nx.shortest_path(G, source, attack_target, weight='ms'), True) for source
+                      in sources]
 
     print("Attack Traffic", attack_traffic)
     print("Background Traffic", background_traffic)
@@ -124,7 +131,7 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
 
         # Generate random start time and duration for the attack
         start_time = datetime.utcfromtimestamp(0) + timedelta(seconds=random.uniform(0, 10))
-        duration = random.uniform(60, 180) if is_attack else random.uniform(10, 70)
+        duration = random.uniform(60, 600) if is_attack else random.uniform(10, 70)
         nr_packets = round(random.uniform(10e3, 10e6)) if is_attack else round(random.uniform(10e2, 10e5))
         nr_megabytes = round(nr_packets / random.uniform(1000, 5000), 2)
 
@@ -168,7 +175,7 @@ def generate_attack_fingerprint(G, sources, target, num_background_fp=10):
                 intermediary_nodes[node]["targets"][target]["sources"].update(spoofed_sources)
                 intermediary_nodes[node]["targets"][target]["nr_packets"].extend(
                     (s, nr_packets / len(spoofed_sources)) for s in spoofed_sources)
-                intermediary_nodes[node]["targets"][target]["nr_packets_by_source"]\
+                intermediary_nodes[node]["targets"][target]["nr_packets_by_source"] \
                     .update({s: intermediary_nodes[node]["targets"][target]["nr_packets_by_source"][s] +
                                 nr_packets / len(spoofed_sources) for s in spoofed_sources})
                 intermediary_nodes[node]["targets"][target]["nr_megabytes"].extend(
