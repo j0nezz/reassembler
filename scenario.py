@@ -21,23 +21,23 @@ random.seed(12)
 SPOOFED_IP_POOL = [IPAddress(random.randint(0, 2 ** 32)) for i in range(50)]
 
 
-def create_hierarchical_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clients=5, color='tab:blue'):
+def create_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clients=5, color='tab:blue'):
     graph = nx.Graph()
     graph.add_node(root.ip, ip=root.ip, level=1, client=False, spoofed=False)
 
-    def create_subnet_nodes(parent_subnet, level):
+    def create_subnet_nodes(parent, level):
         if level == levels:
-            ips = random.sample(list(parent_subnet.iter_hosts()), random.randint(1, max_clients))
+            ips = random.sample(list(parent.iter_hosts()), random.randint(1, max_clients))
             for p in ips:
                 graph.add_node(p, ip=p, level=level + 1,
                                client=True, spoofed=bool(random.getrandbits(1)),
                                spoofed_ips=random.sample(SPOOFED_IP_POOL, random.randint(7, 25)))
-                graph.add_edge(parent_subnet.ip, p, color=color, level=level + 1, ms=random.uniform(0.001, 0.01))
+                graph.add_edge(parent.ip, p, color=color, level=level + 1, ms=random.uniform(1, 100))
             return
 
         nr_nodes = random.randint(1, max_clients)
         i = 0
-        for s in parent_subnet.subnet(parent_subnet.prefixlen + prefixlen):
+        for s in parent.subnet(parent.prefixlen + prefixlen):
             i += 1
             if i > nr_nodes:
                 break
@@ -45,7 +45,7 @@ def create_hierarchical_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clien
 
             graph.add_node(s.ip, ip=s.ip, level=level + 1, client=False, spoofed=False)
             # weight is the simulated duration in ms
-            graph.add_edge(parent_subnet.ip, s.ip, color=color, level=level + 1, ms=random.uniform(0.001, 0.01))
+            graph.add_edge(parent.ip, s.ip, color=color, level=level + 1, ms=random.uniform(1, 100))
             create_subnet_nodes(s, level + 1)
 
     create_subnet_nodes(root, 0)
@@ -54,20 +54,23 @@ def create_hierarchical_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clien
 
 
 def create_network(subnets: list[IPNetwork], max_levels=3, max_clients=5):
-    subgraphs = [create_hierarchical_subnet(s, levels=random.randint(1, max_levels), color=COLORS[i],
-                                            max_clients=random.randint(2, max_clients), prefixlen=3) for i, s in
+    subgraphs = [create_subnet(s, levels=random.randint(1, max_levels), color=COLORS[i],
+                               max_clients=random.randint(2, max_clients), prefixlen=4) for i, s in
                  enumerate(subnets)]
 
     F = nx.compose_all(subgraphs)
     n = len(subnets)
 
+    if len(subnets) <= 1:
+        return F
+
     # Ring topology
-    edges = [(subnets[i].ip, subnets[(i + 1) % n].ip, {'color': 'r', 'level': 0, 'ms': random.uniform(0.001, 0.01)}) for
+    edges = [(subnets[i].ip, subnets[(i + 1) % n].ip, {'color': 'r', 'level': 0, 'ms': random.uniform(1, 100)}) for
              i in range(n)]
 
     # Add random connections to create a partial mesh
     m = round(n / 2)
-    partial_mesh = [(u.ip, v.ip, {'color': 'r', 'level': 0, 'ms': random.uniform(0.001, 0.01)}) for u, v in
+    partial_mesh = [(u.ip, v.ip, {'color': 'r', 'level': 0, 'ms': random.uniform(1, 100)}) for u, v in
                     random.sample(list(itertools.combinations(subnets, 2)), m)]
 
     edges.extend(partial_mesh)
@@ -93,8 +96,13 @@ def draw_network(G: Graph):
     edge_widths = [2 if level == 0 else 1.5 / level for level in nx.get_edge_attributes(G, 'level').values()]
     node_sizes = [40 - level * 7 for level in nx.get_node_attributes(G, 'level').values()]
 
-    nx.draw(G, with_labels=False, font_size=10, node_size=node_sizes, width=edge_widths, edge_color=edge_colors,
+    pos = nx.spring_layout(G)
+
+    nx.draw(G, pos,  with_labels=False, font_size=14, node_size=node_sizes, width=edge_widths, edge_color=edge_colors,
             node_color=node_colors, labels=labels)
+    # label_pos = {node: (coords[0], coords[1] + 0.05) for node, coords in pos.items()}
+    # nx.draw_networkx_labels(G, label_pos, labels=labels, font_size=16)
+
     plt.show()
 
 
@@ -104,14 +112,15 @@ def calculate_hash(data):
     return data
 
 
-def generate_background_traffic(G, num_background_traffic, target, bg_to_target=0.2):
-    unrelated_traffic = [(x, y) for x, y in itertools.combinations(G.nodes, 2) if x != y and y != target]
-    unrelated_traffic_combinations = random.sample(unrelated_traffic, int(num_background_traffic * (1 - bg_to_target)))
+def generate_background_traffic(G, amount, target, targeted_pct=0.2):
+    unrelated = [(x, y) for x, y in itertools.combinations(G.nodes, 2) if x != y and y != target]
+    unrelated_sample = random.sample(unrelated, int(amount * (1 - targeted_pct)))
 
-    traffic_to_target = [(n, target) for n, data in G.nodes(data=True) if not data.get('spoofed', False)]
-    traffic_to_target_combinations = random.sample(traffic_to_target, int(num_background_traffic * bg_to_target))
-    return [(source, target, nx.shortest_path(G, source, target, weight='ms'), False) for source, target in
-            unrelated_traffic_combinations + traffic_to_target_combinations]
+    # TODO: Make sure that targeted traffic cannot come from an attack source
+    targeted = [(n, target) for n, data in G.nodes(data=True) if not data.get('spoofed', False)]
+    targeted_sample = random.sample(targeted, int(amount * targeted_pct))
+    return [(s, t, nx.shortest_path(G, s, t, weight='ms'), False) for s, t in
+            unrelated_sample + targeted_sample]
 
 
 def generate_attack_fingerprint(G, sources, attack_target, num_background_fp=10):
@@ -161,8 +170,8 @@ def generate_attack_fingerprint(G, sources, attack_target, num_background_fp=10)
 
             if i > 0:
                 prev_node = path[i - 1]
-                edge_weight = G[prev_node][node]['ms']
-                accumulated_weight += edge_weight
+                ms = G[prev_node][node]['ms']
+                accumulated_weight += ms / 1000
             source_data = G.nodes(data=True)[source]
 
             if source_data.get('spoofed', False):
@@ -170,11 +179,11 @@ def generate_attack_fingerprint(G, sources, attack_target, num_background_fp=10)
                 intermediary_nodes[node]["targets"][target]["ttl_by_source"].update(
                     {s: intermediary_nodes[node]["targets"][target]["ttl_by_source"].get(s, []) + [ttl] for s in
                      spoofed_sources})
+                # TODO: This has to be a list, otherwise for IP collisions it will be overwritten
                 intermediary_nodes[node]["targets"][target]["sources_real"].update(
                     dict.fromkeys(spoofed_sources, str(source)))
                 intermediary_nodes[node]["targets"][target]["sources"].update(spoofed_sources)
-                intermediary_nodes[node]["targets"][target]["nr_packets"].extend(
-                    (s, nr_packets / len(spoofed_sources)) for s in spoofed_sources)
+                intermediary_nodes[node]["targets"][target]["nr_packets"].append(nr_packets)
                 intermediary_nodes[node]["targets"][target]["nr_packets_by_source"] \
                     .update({s: intermediary_nodes[node]["targets"][target]["nr_packets_by_source"][s] +
                                 nr_packets / len(spoofed_sources) for s in spoofed_sources})
@@ -184,7 +193,7 @@ def generate_attack_fingerprint(G, sources, attack_target, num_background_fp=10)
                 intermediary_nodes[node]["targets"][target]["ttl_by_source"][str(source)] = [ttl]
                 intermediary_nodes[node]["targets"][target]["sources_real"][str(source)] = str(source)
                 intermediary_nodes[node]["targets"][target]["sources"].add(str(source))
-                intermediary_nodes[node]["targets"][target]["nr_packets"].append((str(source), nr_packets))
+                intermediary_nodes[node]["targets"][target]["nr_packets"].append(nr_packets)
                 intermediary_nodes[node]["targets"][target]["nr_packets_by_source"][str(source)] = nr_packets
                 intermediary_nodes[node]["targets"][target]["nr_megabytes"].append((str(source), nr_megabytes))
 
@@ -198,24 +207,22 @@ def generate_attack_fingerprint(G, sources, attack_target, num_background_fp=10)
     fingerprints = []
     for node, node_data in intermediary_nodes.items():
         # Calculate total packets through node
-        total_packets_to_node = sum(sum(n for _, n in item["nr_packets"]) for item in node_data["targets"].values())
+        total_packets_to_node = sum(sum(item["nr_packets"]) for item in node_data["targets"].values())
         for target, target_data in node_data["targets"].items():
             ttl_dict = target_data["ttl"]
             fp_sources = list(target_data["sources"])
 
             # Calculate the total number of packets for this intermediary node
-            # TODO rename
-            total_packets = sum(count for _, count in target_data["nr_packets"])
+            nr_packets_to_target = sum(target_data["nr_packets"])
 
             # Normalize the TTL values
-            ttl_normalized = {ttl: count / total_packets for ttl, count in ttl_dict.items()}
+            ttl_normalized = {ttl: count / nr_packets_to_target for ttl, count in ttl_dict.items()}
 
             # Calculate the earliest start time and latest end time
             min_start_time = min(target_data["time_start"])
             max_end_time = max(
                 t1 + timedelta(seconds=t2) for t1, t2 in
                 zip(target_data["time_start"], target_data["duration_seconds"]))
-            nr_packets_to_target = sum(n for _, n in target_data["nr_packets"])
             fingerprint = {
                 "attack_vectors": [
                     {
@@ -236,12 +243,11 @@ def generate_attack_fingerprint(G, sources, attack_target, num_background_fp=10)
                 ],
                 "target": str(G.nodes[target]["ip"]),
                 "location": str(G.nodes[node]["ip"]),
-                "location_real": str(G.nodes[node]["ip"])
             }
             fingerprints.append(fingerprint)
 
     str_sources = list(map(str, sources))
     # Filter fingerprints from attack sources, as we do not have this data in a real world scenario
-    filtered_fingerprints = [f for f in fingerprints if f['location_real'] not in str_sources]
+    filtered_fingerprints = [f for f in fingerprints if f['location'] not in str_sources]
 
     return list(map(calculate_hash, filtered_fingerprints))

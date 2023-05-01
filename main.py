@@ -26,7 +26,7 @@ if __name__ == '__main__':
     # Create the output folder if it does not exist
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
-
+    # TODO: Put this into generator and overwrite
     for fingerprint in fingerprints:
         output_file = os.path.join(output_folder, f"{fingerprint['location']}_{fingerprint['target']}.json")
         with open(output_file, "w") as f:

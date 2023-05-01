@@ -71,6 +71,8 @@ class Reassembler:
         intermediate_nodes['fraction_of_total_attack'] = intermediate_nodes['nr_packets'] / total_attack_size_at_target
         intermediate_nodes['duration_seconds'] = (intermediate_nodes['time_end'] - intermediate_nodes['time_start']).dt.total_seconds()
         intermediate_nodes = intermediate_nodes.applymap(lambda x: x.isoformat() if isinstance(x, pd.Timestamp) else x)
+
+        # TODO make this threshold dynamic based on observed values at the target (e.g. <1% of attack duration)
         filtered_intermediate_nodes = intermediate_nodes[intermediate_nodes['duration_seconds'] > 60]
 
         pct_spoofed = len(entries_at_target[entries_at_target['ttl_count'] > 1]) / len(entries_at_target)
@@ -95,8 +97,11 @@ class Reassembler:
         }
         self.save_to_json(summary, 'summary.json')
 
-        bins = filtered_intermediate_nodes.groupby('hops_to_target')['nr_packets'].apply(list)
-        plot_network(sources.tolist(), bins.sort_index(ascending=False).tolist())
+        filtered_intermediate_nodes.plot.scatter(x='hops_to_target', y='fraction_of_total_attack')
+
+        bins = filtered_intermediate_nodes.groupby('hops_to_target').agg({'nr_packets': list, 'fraction_of_total_attack': 'sum'})
+
+        plot_network(sources.tolist(), bins['nr_packets'].sort_index(ascending=False).tolist())
 
     def find_target(self) -> tuple[str, str]:
         """
