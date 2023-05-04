@@ -1,7 +1,9 @@
 import hashlib
 import itertools
 import json
+import os
 import random
+import shutil
 from collections import defaultdict
 from datetime import datetime, timedelta
 
@@ -123,7 +125,7 @@ def generate_background_traffic(G, amount, target, targeted_pct=0.2):
             unrelated_sample + targeted_sample]
 
 
-def generate_attack_fingerprint(G, sources, attack_target, num_background_fp=10):
+def generate_attack_fingerprint(G, sources, attack_target, num_background_fp=10, output_folder='fingerprints', overwrite_files=True):
     common_ttls = [32, 64, 128, 255]
     intermediary_nodes = {}  # by target
 
@@ -226,8 +228,8 @@ def generate_attack_fingerprint(G, sources, attack_target, num_background_fp=10)
             fingerprint = {
                 "attack_vectors": [
                     {
-                        "service": None,  # TODO: Different Services
-                        "protocol": "TCP",  # TODO: Also support different protocols
+                        "service": None,
+                        "protocol": "TCP",
                         "source_ips": sorted([str(s) for s in fp_sources]),
                         "source_ips_real": target_data["sources_real"],
                         "ttl": ttl_normalized,
@@ -250,4 +252,15 @@ def generate_attack_fingerprint(G, sources, attack_target, num_background_fp=10)
     # Filter fingerprints from attack sources, as we do not have this data in a real world scenario
     filtered_fingerprints = [f for f in fingerprints if f['location'] not in str_sources]
 
-    return list(map(calculate_hash, filtered_fingerprints))
+    fingerprints_with_key = list(map(calculate_hash, filtered_fingerprints))
+
+    if os.path.exists(output_folder) and overwrite_files:
+        shutil.rmtree(output_folder)
+
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    for fingerprint in fingerprints_with_key:
+        output_file = os.path.join(output_folder, f"{fingerprint['key']}.json")
+        with open(output_file, "w") as f:
+            json.dump(fingerprint, f, indent=2)

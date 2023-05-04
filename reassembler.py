@@ -1,6 +1,7 @@
 import json
 
 import pandas as pd
+import seaborn as sns
 from pandas import DataFrame
 
 __all__ = ['Reassembler']
@@ -44,10 +45,18 @@ class Reassembler:
         self.fps = fingerprints
         self.fps['time_start'] = pd.to_datetime(self.fps['time_start'])
         self.fps['time_end'] = self.fps['time_start'] + pd.to_timedelta(self.fps['duration_seconds'], unit='s')
+        self.target = self.find_target()
+
+    def drop_fingerprints(self, percentage_to_drop):
+        print(f"Len before dropping {len(self.fps)}")
+        num_rows_to_drop = int(self.fps.shape[0] * percentage_to_drop)
+        rows_to_drop = self.fps[self.fps['location'] != self.target].sample(n=num_rows_to_drop).index
+        df_dropped = self.fps.drop(rows_to_drop)
+        print(f"Len after dropping {len(df_dropped)}")
+        self.fps = df_dropped.copy()
 
     def reassemble(self):
-        target, target_key = self.find_target()
-
+        target = self.target
         entries_at_target = self.fps[(self.fps['location'] == target) & (self.fps['target'] == target)].copy()
         entries_at_target['ttl_count'] = entries_at_target['ttl'].apply(lambda x: len(x))
         total_attack_size_at_target = entries_at_target['nr_packets'].sum()
@@ -97,7 +106,9 @@ class Reassembler:
         }
         self.save_to_json(summary, 'summary.json')
 
-        filtered_intermediate_nodes.plot.scatter(x='hops_to_target', y='fraction_of_total_attack')
+        sns.lmplot(x='hops_to_target', y='detection_threshold', data=filtered_intermediate_nodes, fit_reg=True)
+
+        #filtered_intermediate_nodes.plot.scatter(x='hops_to_target', y='detection_threshold')
 
         bins = filtered_intermediate_nodes.groupby('hops_to_target').agg({'nr_packets': list, 'fraction_of_total_attack': 'sum'})
 
@@ -111,7 +122,7 @@ class Reassembler:
         possible_targets = self.fps[self.fps['target'] == self.fps['location']].groupby(['location', 'target']).agg(
             {'nr_packets': 'sum', 'key': 'min'}).sort_values('nr_packets', ascending=False)
 
-        return possible_targets.index[0][0], possible_targets.iloc[0]['key']
+        return possible_targets.index[0][0]
 
     def save_to_json(self, data, filename='data.json'):
         with open(filename, "w") as f:
