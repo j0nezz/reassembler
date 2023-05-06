@@ -1,12 +1,16 @@
 import json
 
+import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib import pyplot as plt
 from pandas import DataFrame
 
 __all__ = ['Reassembler']
 
 from visualization import plot_network
+
+DEFAULT_PERCENTILES = [25, 50, 75]
 
 
 def calculate_hops(ttl_list):
@@ -40,6 +44,14 @@ def calculate_hops_to_target(row):
     return mean_distance
 
 
+def calculate_percentile_values(df_col, percentiles=None):
+    if percentiles is None:
+        percentiles = DEFAULT_PERCENTILES
+    return [np.percentile(df_col, p) for p in percentiles]
+
+
+
+
 class Reassembler:
     def __init__(self, fingerprints: DataFrame):
         self.fps = fingerprints
@@ -54,6 +66,29 @@ class Reassembler:
         df_dropped = self.fps.drop(rows_to_drop)
         print(f"Len after dropping {len(df_dropped)}")
         self.fps = df_dropped.copy()
+
+    def draw_percentiles(self, df, colA, colB, percentiles=None):
+        if percentiles is None:
+            percentiles = DEFAULT_PERCENTILES
+
+        plt.scatter(df[colA], df[colB])
+        colormap = plt.get_cmap('plasma', len(percentiles) + 1)
+
+        percentile_values = calculate_percentile_values(df[colB], percentiles)
+        categories = pd.cut(df[colB], bins=[-np.inf, *percentile_values, np.inf], labels=False)
+
+        # Create the scatter plot with the assigned colors
+        plt.scatter(df[colA], df[colB], c=colormap(categories))
+
+        # Draw percentile lines and add legend
+        for value, percentile, color in zip(percentile_values, percentiles, colormap.colors[:-1]):
+            plt.axhline(value, linestyle='--', color=color, label=f'{percentile}th percentile')
+
+        plt.xlabel(colA)
+        plt.ylabel(colB)
+        plt.legend()
+        plt.title(f'{colA} vs {colB}')
+        plt.show()
 
     def reassemble(self):
         target = self.target
@@ -85,6 +120,9 @@ class Reassembler:
         filtered_intermediate_nodes = intermediate_nodes[intermediate_nodes['duration_seconds'] > 60]
 
         pct_spoofed = len(entries_at_target[entries_at_target['ttl_count'] > 1]) / len(entries_at_target)
+
+        threshold_percentiles = calculate_percentile_values(filtered_intermediate_nodes['detection_threshold'], DEFAULT_PERCENTILES)
+
         summary = {
             'attack': {
                 'start_time': entries_at_target['time_start'].min().isoformat(),
@@ -97,6 +135,7 @@ class Reassembler:
             'intermediate_nodes': {
                 'discarded_intermediate_nodes': len(intermediate_nodes)- len(filtered_intermediate_nodes),
                 'nr_intermediate_nodes': len(filtered_intermediate_nodes),
+                'detection_threshold': {p: v for p, v in zip(DEFAULT_PERCENTILES, threshold_percentiles)},
                 'key_nodes': filtered_intermediate_nodes.sort_values('nr_packets', ascending=False).sort_values('hops_to_target').to_dict('index')
             },
             'sources': {
@@ -106,7 +145,8 @@ class Reassembler:
         }
         self.save_to_json(summary, 'summary.json')
 
-        sns.lmplot(x='hops_to_target', y='detection_threshold', data=filtered_intermediate_nodes, fit_reg=True)
+        self.draw_percentiles(filtered_intermediate_nodes, 'hops_to_target', 'detection_threshold')
+        # sns.lmplot(x='hops_to_target', y='detection_threshold', data=filtered_intermediate_nodes, fit_reg=True)
 
         #filtered_intermediate_nodes.plot.scatter(x='hops_to_target', y='detection_threshold')
 
