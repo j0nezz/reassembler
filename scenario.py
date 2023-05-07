@@ -23,7 +23,7 @@ random.seed(12)
 SPOOFED_IP_POOL = [IPAddress(random.randint(0, 2 ** 32)) for i in range(50)]
 
 
-def create_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clients=5, color='tab:blue', spoofed_pct=0.8):
+def create_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clients=5, color='tab:blue', spoofed_pct=0.5):
     graph = nx.Graph()
     graph.add_node(root.ip, ip=root.ip, level=1, client=False, spoofed=False)
 
@@ -114,12 +114,11 @@ def calculate_hash(data):
     return data
 
 
-def generate_background_traffic(G, amount, target, targeted_pct=0.2):
+def generate_background_traffic(G, amount, target, sources, targeted_pct=0.2):
     unrelated = [(x, y) for x, y in itertools.combinations(G.nodes, 2) if x != y and y != target]
     unrelated_sample = random.sample(unrelated, int(amount * (1 - targeted_pct)))
 
-    # TODO: Make sure that targeted traffic cannot come from an attack source
-    targeted = [(n, target) for n, data in G.nodes(data=True) if not data.get('spoofed', False)]
+    targeted = [(n, target) for n, data in G.nodes(data=True) if not data.get('spoofed', False) and n not in sources]
     targeted_sample = random.sample(targeted, int(amount * targeted_pct))
     return [(s, t, nx.shortest_path(G, s, t, weight='ms'), False) for s, t in
             unrelated_sample + targeted_sample]
@@ -130,7 +129,7 @@ def generate_attack_fingerprint(G, sources, attack_target, num_background_fp=10,
     intermediary_nodes = {}  # by target
 
     # Iterate through each source
-    background_traffic = generate_background_traffic(G, num_background_fp, attack_target)
+    background_traffic = generate_background_traffic(G, num_background_fp, attack_target, sources)
     attack_traffic = [(source, attack_target, nx.shortest_path(G, source, attack_target, weight='ms'), True) for source
                       in sources]
 
