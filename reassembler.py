@@ -95,7 +95,6 @@ class Reassembler:
         entries_at_target = self.fps[(self.fps['location'] == target) & (self.fps['target'] == target)].copy()
         entries_at_target['ttl_count'] = entries_at_target['ttl'].apply(lambda x: len(x))
         total_attack_size_at_target = entries_at_target['nr_packets'].sum()
-        print("Entries at Target", entries_at_target[['source_ip', 'nr_packets', 'target', 'duration_seconds']])
 
         ttls_at_target = entries_at_target[['source_ip', 'ttl']].copy()
         ttls_at_target.columns = ['source_ip', 'ttl_on_target']
@@ -105,13 +104,12 @@ class Reassembler:
         observing_fp['hops'] = observing_fp['ttl'].apply(calculate_hops)
         observing_fp = observing_fp.merge(ttls_at_target, how='left', on='source_ip')
         observing_fp['hops_to_target'] = observing_fp.apply(calculate_hops_to_target, axis=1)
-        print(observing_fp[['location', 'source_ip', 'ttl', 'detection_threshold']].sort_values(
-            'location'))
 
         sources = entries_at_target['ttl'].apply(lambda x: len(x))
 
-        intermediate_nodes = observing_fp.groupby('location').agg({'nr_packets': 'sum', 'hops_to_target': 'mean', 'detection_threshold':'min', 'time_start': 'min', 'time_end': 'max'}).copy()
+        intermediate_nodes = observing_fp.groupby('location').agg({'nr_packets': 'sum', 'hops_to_target': 'mean', 'detection_threshold':'min', 'time_start': 'min', 'time_end': 'max', 'distance': 'min'}).copy()
         intermediate_nodes['hops_to_target'] = intermediate_nodes['hops_to_target'].round()
+        intermediate_nodes['inferred_distance_diff'] = (intermediate_nodes['hops_to_target'] - intermediate_nodes['distance'])
         intermediate_nodes['fraction_of_total_attack'] = intermediate_nodes['nr_packets'] / total_attack_size_at_target
         intermediate_nodes['duration_seconds'] = (intermediate_nodes['time_end'] - intermediate_nodes['time_start']).dt.total_seconds()
         intermediate_nodes = intermediate_nodes.applymap(lambda x: x.isoformat() if isinstance(x, pd.Timestamp) else x)
@@ -122,6 +120,7 @@ class Reassembler:
         pct_spoofed = len(entries_at_target[entries_at_target['ttl_count'] > 1]) / len(entries_at_target)
 
         threshold_percentiles = calculate_percentile_values(filtered_intermediate_nodes['detection_threshold'], DEFAULT_PERCENTILES)
+
 
         summary = {
             'attack': {

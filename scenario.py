@@ -23,7 +23,7 @@ random.seed(12)
 SPOOFED_IP_POOL = [IPAddress(random.randint(0, 2 ** 32)) for i in range(50)]
 
 
-def create_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clients=5, color='tab:blue'):
+def create_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clients=5, color='tab:blue', spoofed_pct=0.8):
     graph = nx.Graph()
     graph.add_node(root.ip, ip=root.ip, level=1, client=False, spoofed=False)
 
@@ -32,7 +32,7 @@ def create_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clients=5, color='
             ips = random.sample(list(parent.iter_hosts()), random.randint(1, max_clients))
             for p in ips:
                 graph.add_node(p, ip=p, level=level + 1,
-                               client=True, spoofed=bool(random.getrandbits(1)),
+                               client=True, spoofed=random.random() <= spoofed_pct,
                                spoofed_ips=random.sample(SPOOFED_IP_POOL, random.randint(7, 25)))
                 graph.add_edge(parent.ip, p, color=color, level=level + 1, ms=random.uniform(1, 100))
             return
@@ -203,6 +203,7 @@ def generate_attack_fingerprint(G, sources, attack_target, num_background_fp=10,
             intermediary_nodes[node]["targets"][target]["time_start"].append(
                 start_time + timedelta(seconds=accumulated_weight))
             intermediary_nodes[node]["targets"][target]["duration_seconds"].append(duration)
+            intermediary_nodes[node]["targets"][target]["distance_to_target"] = len(path)-1 - i
             ttl -= 1
 
     # Generate attack fingerprints for each intermediary node
@@ -245,6 +246,7 @@ def generate_attack_fingerprint(G, sources, attack_target, num_background_fp=10,
                 ],
                 "target": str(G.nodes[target]["ip"]),
                 "location": str(G.nodes[node]["ip"]),
+                "distance": target_data["distance_to_target"]
             }
             fingerprints.append(fingerprint)
 
