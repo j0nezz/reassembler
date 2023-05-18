@@ -1,17 +1,14 @@
 import json
+import os
 
 import numpy as np
 import pandas as pd
-import seaborn as sns
 from matplotlib import pyplot as plt
-from pandas import DataFrame
 
 __all__ = ['Reassembler']
 
-from scipy import stats
-
 from fingerprint import read_fingerprints
-from visualization import plot_network
+from utils import calculate_hash
 
 DEFAULT_PERCENTILES = [25, 50, 75]
 
@@ -52,7 +49,6 @@ def calculate_percentile_values(df_col, percentiles=None):
         percentiles = DEFAULT_PERCENTILES
     return [np.percentile(df_col, p) for p in percentiles]
 
-
 class Reassembler:
     def __init__(self, folder='./fingerprints'):
         self.fps = read_fingerprints(folder)
@@ -60,11 +56,15 @@ class Reassembler:
         self.fps['time_end'] = self.fps['time_start'] + pd.to_timedelta(self.fps['duration_seconds'], unit='s')
         self.target = self.find_target()
 
+        # TODO: Run different configurations and evaluate which works best
+
     def drop_fingerprints(self, percentage_to_drop):
         num_rows_to_drop = int(self.fps.shape[0] * percentage_to_drop)
         rows_to_drop = self.fps[self.fps['location'] != self.target].sample(n=num_rows_to_drop).index
         df_dropped = self.fps.drop(rows_to_drop)
         self.fps = df_dropped.copy()
+
+        return self
 
     def draw_percentiles(self, df, colA, colB, percentiles=None):
         if percentiles is None:
@@ -89,9 +89,12 @@ class Reassembler:
         plt.title(f'{colA} vs {colB}')
         plt.show()
 
+        return self
+
     def reassemble(self):
         target = self.target
 
+        # TODO: Include protocol / service
         entries_at_target = self.fps[(self.fps['location'] == target) & (self.fps['target'] == target)].copy()
         entries_at_target['ttl_count'] = entries_at_target['ttl'].apply(lambda x: len(x))
         total_attack_size_at_target = entries_at_target['nr_packets'].sum()
@@ -108,11 +111,10 @@ class Reassembler:
             # & ~self.fps['location'].isin(entries_at_target['source_ip'])
                                 ].copy()
 
-        # Filtering by attack source poses the problem, that intermediate nodes are not considered if they send a legitimate own packet to the target
+        # Filtering by attak source poses the problem, that intermediate nodes are not considered if they send a legitimate own packet to the target
         # In turn, this could also be abused to intentionally cancel out intermediate nodes by spoofing their IP address and sending a packet.
-        print("Filter by attack source: ",
-              len(observing_fp[observing_fp['location'].isin(entries_at_target['source_ip'])]))
-        print("Observing FP", observing_fp.head(5))
+        # print("Filter by attack source: ",
+        #      len(observing_fp[observing_fp['location'].isin(entries_at_target['source_ip'])]))
         observing_fp = observing_fp.merge(ttls_at_target, how='left', on='source_ip')
         observing_fp['hops_to_target'] = observing_fp.apply(calculate_hops_to_target, axis=1)
 
@@ -162,18 +164,42 @@ class Reassembler:
             }
         }
 
-        # TODO: Add key and make location dynamic
-        self.save_to_json(summary, 'summary.json')
+        self.summary = summary
 
-        self.draw_percentiles(filtered_intermediate_nodes, 'hops_to_target', 'detection_threshold')
+        return self
+
+        # self.draw_percentiles(filtered_intermediate_nodes, 'hops_to_target', 'detection_threshold')
         # sns.lmplot(x='hops_to_target', y='detection_threshold', data=filtered_intermediate_nodes, fit_reg=True)
 
         # filtered_intermediate_nodes.plot.scatter(x='hops_to_target', y='detection_threshold')
 
-        bins = filtered_intermediate_nodes.groupby('hops_to_target').agg(
-            {'nr_packets': list, 'fraction_of_total_attack': 'sum'})
+        #bins = filtered_intermediate_nodes.groupby('hops_to_target').agg(
+        #    {'nr_packets': list, 'fraction_of_total_attack': 'sum'})
 
-        plot_network(sources.tolist(), bins['nr_packets'].sort_index(ascending=False).tolist())
+        # plot_network(sources.tolist(), bins['nr_packets'].sort_index(ascending=False).tolist())
+
+    def add_ground_truth_data(self, target, sources):
+        if self.summary is None:
+            raise ValueError("Please call the reassemble method first")
+
+        nr_attack_av = len(self.fps[self.fps['is_attack']])
+        nr_background_av = len(self.fps[~self.fps['is_attack']])
+        nr_participating_nodes = self.fps['location'].nunique()
+        locations = self.fps[self.fps['location'] != self.target].groupby('location').agg({'is_attack': 'any'})
+        nr_locations_observing_attack = len(locations[locations['is_attack']])
+
+        ground_truth = {
+            'nr_attack_av': nr_attack_av,
+            'nr_background_av': nr_background_av,
+            'nr_participating_nodes': nr_participating_nodes,
+            'nr_locations_observing_attack': nr_locations_observing_attack,
+            'sources': list(map(str, sources)),
+            'target': str(target)
+        }
+
+        self.summary['ground_truth'] = ground_truth
+
+        return self
 
     def find_target(self) -> str:
         """
@@ -191,6 +217,14 @@ class Reassembler:
         # returns IP of most targeted location
         return possible_targets.index[0]
 
-    def save_to_json(self, data, filename='data.json'):
-        with open(filename, "w") as f:
+    def save_to_json(self, baseDir="./global-fp"):
+        if self.summary is None:
+            raise ValueError("Please call the reassemble method first")
+
+        if not os.path.exists(baseDir):
+            os.makedirs(baseDir)
+
+        data = calculate_hash(self.summary)
+
+        with open(f"{baseDir}/{data['key']}.json", "w") as f:
             json.dump(data, f, indent=2)

@@ -18,7 +18,7 @@ def flatten_fingerprint(data):
                 'source_ip_real': av['source_ips_real'][src_ip],
                 'ttl': av['ttl_by_source'][src_ip],
                 'nr_packets': av['nr_packets_by_source'][src_ip],
-                **{k: av[k] for k in ['service', 'protocol', 'duration_seconds', 'time_start', 'detection_threshold']},
+                **{k: av[k] for k in ['service', 'protocol', 'duration_seconds', 'time_start', 'detection_threshold', 'is_attack']},
                 **{k: data[k] for k in ['target', 'location', 'distance']}
             }
             new_attack_vectors.append(new_attack_vector)

@@ -13,6 +13,8 @@ from matplotlib.pyplot import figure
 from netaddr import IPNetwork, IPAddress
 from networkx import Graph
 
+from utils import calculate_hash
+
 figure(figsize=(12, 8), dpi=120)
 
 __all__ = ['create_network', 'draw_network', 'generate_background_traffic', 'generate_attack_fingerprint']
@@ -56,7 +58,7 @@ def create_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clients=5, color='
 
 
 def create_network(subnets: list[IPNetwork], max_levels=3, max_clients=5):
-    subgraphs = [create_subnet(s, levels=random.randint(1, max_levels), color=COLORS[i],
+    subgraphs = [create_subnet(s, levels=random.randint(1, max_levels), color=COLORS[i%len(COLORS)],
                                max_clients=random.randint(2, max_clients), prefixlen=4) for i, s in
                  enumerate(subnets)]
 
@@ -108,12 +110,6 @@ def draw_network(G: Graph):
     plt.show()
 
 
-def calculate_hash(data):
-    key = hashlib.md5(json.dumps(data, sort_keys=True).encode('utf-8')).hexdigest()
-    data['key'] = key
-    return data
-
-
 def generate_background_traffic(G, amount, target, sources, targeted_pct=0.2):
     unrelated = [(x, y) for x, y in itertools.combinations(G.nodes, 2) if x != y and y != target]
     unrelated_sample = random.sample(unrelated, int(amount * (1 - targeted_pct)))
@@ -132,9 +128,6 @@ def generate_attack_fingerprint(G, sources, attack_target, num_background_fp=10,
     background_traffic = generate_background_traffic(G, num_background_fp, attack_target, sources)
     attack_traffic = [(source, attack_target, nx.shortest_path(G, source, attack_target, weight='ms'), True) for source
                       in sources]
-
-    print("Attack Traffic", attack_traffic)
-    print("Background Traffic", background_traffic)
 
     for source, target, path, is_attack in attack_traffic + background_traffic:
         ttl = random.choice(common_ttls)
@@ -167,7 +160,10 @@ def generate_attack_fingerprint(G, sources, attack_target, num_background_fp=10,
                     "nr_packets": [],
                     "nr_packets_by_source": defaultdict(int),
                     "nr_megabytes": [],
+                    "is_attack": False
                 }
+            if is_attack:
+                intermediary_nodes[node]["targets"][target]["is_attack"] = True
 
             if i > 0:
                 prev_node = path[i - 1]
@@ -239,6 +235,7 @@ def generate_attack_fingerprint(G, sources, attack_target, num_background_fp=10,
                         "nr_packets": nr_packets_to_target,
                         "nr_megabytes": sum(n for _, n in target_data["nr_megabytes"]),
                         "detection_threshold": nr_packets_to_target / total_packets_to_node,
+                        "is_attack": target_data["is_attack"]
 
                     }
                 ],
