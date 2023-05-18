@@ -10,7 +10,7 @@ random.seed(12)
 
 if __name__ == '__main__':
     G = create_network([IPNetwork("10.0.0.0/16"), IPNetwork("55.0.0.0/8"),  IPNetwork("71.220.0.0/16"), IPNetwork("72.220.0.0/16"), IPNetwork("73.220.0.0/16"), IPNetwork("74.220.0.0/16"), IPNetwork("75.220.0.0/16")],  max_clients=5)
-    draw_network(G)
+    # draw_network(G)
 
     clients = [n for n, data in G.nodes(data=True) if data['client']]
     sources = random.sample(clients, 10)
@@ -21,7 +21,6 @@ if __name__ == '__main__':
 
     fingerprints = generate_attack_fingerprint(G, sources, target, num_background_fp=100, output_folder='fingerprints')
 
-    fp = read_fingerprints('./fingerprints')
-    reassembler = Reassembler(fp)
-    # reassembler.drop_fingerprints(0.9)
+    reassembler = Reassembler("./fingerprints")
+    #reassembler.drop_fingerprints(0.9)
     reassembler.reassemble()

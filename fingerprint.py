@@ -10,15 +10,15 @@ __all__ = ['flatten_fingerprint', 'read_fingerprints']
 def flatten_fingerprint(data):
     new_attack_vectors = []
 
-    for attack_vector in data['attack_vectors']:
-        for source_ip in attack_vector['source_ips']:
+    for av in data['attack_vectors']:
+        for src_ip in av['source_ips']:
             new_attack_vector = {
                 'key': data['key'],
-                'source_ip': source_ip,
-                'source_ip_real': attack_vector['source_ips_real'][source_ip],
-                'ttl': attack_vector['ttl_by_source'][source_ip],
-                'nr_packets': attack_vector['nr_packets_by_source'][source_ip],
-                **{k: attack_vector[k] for k in ['service', 'protocol', 'duration_seconds', 'time_start', 'detection_threshold']},
+                'source_ip': src_ip,
+                'source_ip_real': av['source_ips_real'][src_ip],
+                'ttl': av['ttl_by_source'][src_ip],
+                'nr_packets': av['nr_packets_by_source'][src_ip],
+                **{k: av[k] for k in ['service', 'protocol', 'duration_seconds', 'time_start', 'detection_threshold']},
                 **{k: data[k] for k in ['target', 'location', 'distance']}
             }
             new_attack_vectors.append(new_attack_vector)
@@ -27,7 +27,7 @@ def flatten_fingerprint(data):
     return data
 
 
-def read_fingerprints(path: str, location="") -> pd.DataFrame:
+def read_fingerprints(path: str) -> pd.DataFrame:
     # create an empty list to store the DataFrames
     dfs = []
 

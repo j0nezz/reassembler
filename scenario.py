@@ -23,7 +23,7 @@ random.seed(12)
 SPOOFED_IP_POOL = [IPAddress(random.randint(0, 2 ** 32)) for i in range(50)]
 
 
-def create_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clients=5, color='tab:blue', spoofed_pct=0.5):
+def create_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clients=5, color='tab:blue', spoofed_pct=0.8):
     graph = nx.Graph()
     graph.add_node(root.ip, ip=root.ip, level=1, client=False, spoofed=False)
 
@@ -180,7 +180,6 @@ def generate_attack_fingerprint(G, sources, attack_target, num_background_fp=10,
                 intermediary_nodes[node]["targets"][target]["ttl_by_source"].update(
                     {s: intermediary_nodes[node]["targets"][target]["ttl_by_source"].get(s, []) + [ttl] for s in
                      spoofed_sources})
-                # TODO: This has to be a list, otherwise for IP collisions it will be overwritten
                 intermediary_nodes[node]["targets"][target]["sources_real"].update(
                     dict.fromkeys(spoofed_sources, str(source)))
                 intermediary_nodes[node]["targets"][target]["sources"].update(spoofed_sources)
