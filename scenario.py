@@ -1,4 +1,3 @@
-import hashlib
 import itertools
 import json
 import os
@@ -9,7 +8,6 @@ from datetime import datetime, timedelta
 
 import matplotlib.pyplot as plt
 import networkx as nx
-from matplotlib.pyplot import figure
 from netaddr import IPNetwork, IPAddress
 from networkx import Graph
 
@@ -17,12 +15,74 @@ from utils import calculate_hash
 
 # figure(figsize=(12, 8), dpi=120)
 
-__all__ = ['create_network', 'draw_network', 'generate_background_traffic', 'generate_attack_fingerprint']
+__all__ = ['Scenario']
 
 COLORS = ["tab:purple", "tab:green", "tab:orange", "tab:blue", "tab:olive", 'gold', 'teal']
 
 random.seed(12)
-SPOOFED_IP_POOL = [IPAddress(random.randint(0, 2 ** 32)) for i in range(50)]
+
+# TODO: move this into class
+SPOOFED_IP_POOL = [IPAddress(random.randint(0, 2 ** 32)) for i in range(1000)]
+
+
+class Scenario:
+    def __init__(self, subnets: list[IPNetwork], max_levels=3, max_clients=5, spoofed_pct=0.5):
+        self.spoofed_ip_pool = [IPAddress(random.randint(0, 2 ** 32)) for i in range(50)]
+        self.max_levels = max_levels
+        self.max_clients = max_clients
+        self.spoofed_pct = spoofed_pct
+        self.subnets = subnets
+        self.network = create_network(subnets, max_levels=max_levels, max_clients=max_clients, spoofed_pct=spoofed_pct)
+
+        self.clients = [n for n, data in self.network.nodes(data=True) if data['client']]
+        self.target = random.choice(self.clients)
+        self.sources = [random.choice(self.clients)]
+        self.background_traffic = []
+        self.fingerprints = []
+
+    def set_random_attack_sources(self, nr_sources):
+        bg_sources = [t[0] for t in self.background_traffic]
+        possible_sources = [c for c in self.clients if c != self.target and c not in bg_sources]
+        self.sources = random.sample(possible_sources, nr_sources)
+
+        return self
+
+    def add_background_traffic(self, num_background_traffic_routes):
+        self.background_traffic = generate_background_traffic(self.network, num_background_traffic_routes, self.target, self.sources)
+        return self
+
+    def draw_network(self):
+        draw_network(self.network)
+
+        return self
+
+    def update_spoofed_pct(self, updated_pct):
+        for node, attrs in self.network.nodes(data=True):
+            if attrs.get('client', False):
+                self.network.nodes[node]['spoofed'] = random.random() <= updated_pct
+
+        return self
+
+    def simulate_attack(self):
+        self.fingerprints = generate_attack_fingerprint(self.network, self.sources, self.target, self.background_traffic)
+        return self
+
+    def save_to_json(self, output_folder='fingerprints', overwrite_files=True):
+        if len(self.fingerprints) == 0:
+            raise ValueError("Please run a simulation first")
+
+        if os.path.exists(output_folder) and overwrite_files:
+            shutil.rmtree(output_folder)
+
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
+
+        for fingerprint in self.fingerprints:
+            output_file = os.path.join(output_folder, f"{fingerprint['key']}.json")
+            with open(output_file, "w") as f:
+                json.dump(fingerprint, f, indent=2)
+
+        return self
 
 
 def create_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clients=5, color='tab:blue', spoofed_pct=0.8):
@@ -58,8 +118,9 @@ def create_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clients=5, color='
 
 
 def create_network(subnets: list[IPNetwork], max_levels=3, max_clients=5, spoofed_pct=0.5):
-    subgraphs = [create_subnet(s, levels=random.randint(1, max_levels), color=COLORS[i%len(COLORS)],
-                               max_clients=random.randint(2, max_clients), prefixlen=4, spoofed_pct=spoofed_pct) for i, s in
+    subgraphs = [create_subnet(s, levels=random.randint(1, max_levels), color=COLORS[i % len(COLORS)],
+                               max_clients=random.randint(2, max_clients), prefixlen=4, spoofed_pct=spoofed_pct) for
+                 i, s in
                  enumerate(subnets)]
 
     F = nx.compose_all(subgraphs)
@@ -102,7 +163,7 @@ def draw_network(G: Graph):
 
     pos = nx.spring_layout(G)
 
-    nx.draw(G, pos,  with_labels=False, font_size=14, node_size=node_sizes, width=edge_widths, edge_color=edge_colors,
+    nx.draw(G, pos, with_labels=False, font_size=14, node_size=node_sizes, width=edge_widths, edge_color=edge_colors,
             node_color=node_colors, labels=labels)
     # label_pos = {node: (coords[0], coords[1] + 0.05) for node, coords in pos.items()}
     # nx.draw_networkx_labels(G, label_pos, labels=labels, font_size=16)
@@ -120,12 +181,12 @@ def generate_background_traffic(G, amount, target, sources, targeted_pct=0.2):
             unrelated_sample + targeted_sample]
 
 
-def generate_attack_fingerprint(G, sources, attack_target, num_background_fp=10, output_folder='fingerprints', overwrite_files=True):
+def generate_attack_fingerprint(G, sources, attack_target, background_traffic):
+    print(f"Generate Attack: {len(sources)} Sources, {len(background_traffic)} BG traffic")
     common_ttls = [32, 64, 128, 255]
     intermediary_nodes = {}  # by target
 
     # Iterate through each source
-    background_traffic = generate_background_traffic(G, num_background_fp, attack_target, sources)
     attack_traffic = [(source, attack_target, nx.shortest_path(G, source, attack_target, weight='ms'), True) for source
                       in sources]
 
@@ -197,7 +258,7 @@ def generate_attack_fingerprint(G, sources, attack_target, num_background_fp=10,
             intermediary_nodes[node]["targets"][target]["time_start"].append(
                 start_time + timedelta(seconds=accumulated_weight))
             intermediary_nodes[node]["targets"][target]["duration_seconds"].append(duration)
-            intermediary_nodes[node]["targets"][target]["distance_to_target"] = len(path)-1 - i
+            intermediary_nodes[node]["targets"][target]["distance_to_target"] = len(path) - 1 - i
             ttl -= 1
 
     # Generate attack fingerprints for each intermediary node
@@ -251,13 +312,4 @@ def generate_attack_fingerprint(G, sources, attack_target, num_background_fp=10,
 
     fingerprints_with_key = list(map(calculate_hash, filtered_fingerprints))
 
-    if os.path.exists(output_folder) and overwrite_files:
-        shutil.rmtree(output_folder)
-
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-
-    for fingerprint in fingerprints_with_key:
-        output_file = os.path.join(output_folder, f"{fingerprint['key']}.json")
-        with open(output_file, "w") as f:
-            json.dump(fingerprint, f, indent=2)
+    return fingerprints_with_key

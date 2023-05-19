@@ -3,7 +3,7 @@ import os
 
 import pandas as pd
 
-__all__ = ['flatten_fingerprint', 'read_fingerprints']
+__all__ = ['flatten_fingerprint', 'read_fingerprints_from_folder']
 
 
 # Function to extract nested data and create new records with the desired format
@@ -27,7 +27,8 @@ def flatten_fingerprint(data):
     return data
 
 
-def read_fingerprints(path: str) -> pd.DataFrame:
+
+def read_fingerprints_from_folder(path: str) -> pd.DataFrame:
     # create an empty list to store the DataFrames
     dfs = []
 

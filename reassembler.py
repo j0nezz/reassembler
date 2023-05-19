@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 
 __all__ = ['Reassembler']
 
-from fingerprint import read_fingerprints
+from fingerprint import read_fingerprints_from_folder, flatten_fingerprint
 from utils import calculate_hash
 
 DEFAULT_PERCENTILES = [25, 50, 75]
@@ -49,9 +49,18 @@ def calculate_percentile_values(df_col, percentiles=None):
         percentiles = DEFAULT_PERCENTILES
     return [np.percentile(df_col, p) for p in percentiles]
 
+
 class Reassembler:
-    def __init__(self, folder='./fingerprints'):
-        self.fps = read_fingerprints(folder)
+    def __init__(self, fingerprint_folder=None, fingerprint_data=[]):
+
+        if len(fingerprint_data) > 0:
+            self.fps = pd.concat([pd.json_normalize(flatten_fingerprint(x), 'attack_vectors')
+                                  for x in fingerprint_data], ignore_index=True)
+        elif fingerprint_folder is not None:
+            self.fps = read_fingerprints_from_folder(fingerprint_folder)
+        else:
+            raise ValueError("No Fingerprint Data provided")
+
         self.fps['time_start'] = pd.to_datetime(self.fps['time_start'])
         self.fps['time_end'] = self.fps['time_start'] + pd.to_timedelta(self.fps['duration_seconds'], unit='s')
         self.target = self.find_target()
@@ -173,7 +182,7 @@ class Reassembler:
 
         # filtered_intermediate_nodes.plot.scatter(x='hops_to_target', y='detection_threshold')
 
-        #bins = filtered_intermediate_nodes.groupby('hops_to_target').agg(
+        # bins = filtered_intermediate_nodes.groupby('hops_to_target').agg(
         #    {'nr_packets': list, 'fraction_of_total_attack': 'sum'})
 
         # plot_network(sources.tolist(), bins['nr_packets'].sort_index(ascending=False).tolist())
@@ -228,3 +237,5 @@ class Reassembler:
 
         with open(f"{baseDir}/{data['key']}.json", "w") as f:
             json.dump(data, f, indent=2)
+
+        return self
