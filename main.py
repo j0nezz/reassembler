@@ -17,7 +17,9 @@ def run_full_workflow(G, nr_sources=10, nr_background=100):
     target = random.choice(possible_targets)
 
     generate_attack_fingerprint(G, sources, target, num_background_fp=nr_background, output_folder='./fingerprints')
-    r = Reassembler("./fingerprints").reassemble().add_ground_truth_data(target, sources)
+    r = (Reassembler("./fingerprints")
+         .reassemble()
+         .add_ground_truth_data(target, sources))
 
     return r.summary
 
@@ -29,14 +31,23 @@ def plot_nr_source_vs_observing_fp(data):
     plt.title('Observations')
     plt.show()
 
+def plot_spoofed_vs_discarded_nodes(data, spoofed_pct):
+    plt.plot(spoofed_pct, [d['sources']['pct_spoofed'] for d in data], 'o')
+    plt.xlabel('% Spoofed')
+    plt.ylabel('% Estimated')
+    plt.title('Actual Spoofed Pct. vs Estimated Pct.')
+    plt.show()
+
 
 if __name__ == '__main__':
     summaries = []
+    spoofed_pct = []
     nr_subnets = [IPNetwork(f"{10 + i}.0.0.0/8") for i in range(10)]
-    G = create_network(nr_subnets, max_clients=5, max_levels=4)
-    print("Number of Network nodes", G.number_of_nodes())
-    for i in range(20):
-        print(f"Evaluating Run {i+1} with {5*(i+1)} sources")
+    for i in range(10):
+        pct = 0.1*i
+        spoofed_pct.append(pct)
+        G = create_network(nr_subnets, max_clients=5, max_levels=4, spoofed_pct=pct)
+        print(f"Evaluating Run {i+1} with {0.05*i} spoofed sources")
         summaries.append(run_full_workflow(G, nr_sources=5*(i+1)))
 
-    plot_nr_source_vs_observing_fp(summaries)
+    plot_spoofed_vs_discarded_nodes(summaries, spoofed_pct)

@@ -15,7 +15,7 @@ from networkx import Graph
 
 from utils import calculate_hash
 
-figure(figsize=(12, 8), dpi=120)
+# figure(figsize=(12, 8), dpi=120)
 
 __all__ = ['create_network', 'draw_network', 'generate_background_traffic', 'generate_attack_fingerprint']
 
@@ -57,9 +57,9 @@ def create_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clients=5, color='
     return graph
 
 
-def create_network(subnets: list[IPNetwork], max_levels=3, max_clients=5):
+def create_network(subnets: list[IPNetwork], max_levels=3, max_clients=5, spoofed_pct=0.5):
     subgraphs = [create_subnet(s, levels=random.randint(1, max_levels), color=COLORS[i%len(COLORS)],
-                               max_clients=random.randint(2, max_clients), prefixlen=4) for i, s in
+                               max_clients=random.randint(2, max_clients), prefixlen=4, spoofed_pct=spoofed_pct) for i, s in
                  enumerate(subnets)]
 
     F = nx.compose_all(subgraphs)
