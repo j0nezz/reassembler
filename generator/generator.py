@@ -15,7 +15,7 @@ from utils import calculate_hash
 
 # figure(figsize=(12, 8), dpi=120)
 
-__all__ = ['Scenario']
+__all__ = ['Generator']
 
 COLORS = ["tab:purple", "tab:green", "tab:orange", "tab:blue", "tab:olive", 'gold', 'teal']
 
@@ -25,7 +25,7 @@ random.seed(12)
 SPOOFED_IP_POOL = [IPAddress(random.randint(0, 2 ** 32)) for i in range(1000)]
 
 
-class Scenario:
+class Generator:
     def __init__(self, subnets: list[IPNetwork], max_levels=3, max_clients=5, spoofed_pct=0.5):
         self.spoofed_ip_pool = [IPAddress(random.randint(0, 2 ** 32)) for i in range(50)]
         self.max_levels = max_levels
@@ -44,7 +44,6 @@ class Scenario:
         bg_sources = [t[0] for t in self.background_traffic]
         possible_sources = [c for c in self.clients if c != self.target and c not in bg_sources]
         self.sources = random.sample(possible_sources, nr_sources)
-
         return self
 
     def add_background_traffic(self, num_background_traffic_routes):
@@ -56,7 +55,7 @@ class Scenario:
 
         return self
 
-    def update_spoofed_pct(self, updated_pct):
+    def set_spoofed_pct(self, updated_pct):
         for node, attrs in self.network.nodes(data=True):
             if attrs.get('client', False):
                 self.network.nodes[node]['spoofed'] = random.random() <= updated_pct
@@ -119,7 +118,7 @@ def create_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clients=5, color='
 
 def create_network(subnets: list[IPNetwork], max_levels=3, max_clients=5, spoofed_pct=0.5):
     subgraphs = [create_subnet(s, levels=random.randint(1, max_levels), color=COLORS[i % len(COLORS)],
-                               max_clients=random.randint(2, max_clients), prefixlen=4, spoofed_pct=spoofed_pct) for
+                               max_clients=random.randint(2, max_clients), prefixlen=3, spoofed_pct=spoofed_pct) for
                  i, s in
                  enumerate(subnets)]
 
@@ -189,12 +188,11 @@ def generate_attack_fingerprint(G, sources, attack_target, background_traffic):
     # Iterate through each source
     attack_traffic = [(source, attack_target, nx.shortest_path(G, source, attack_target, weight='ms'), True) for source
                       in sources]
-
     for source, target, path, is_attack in attack_traffic + background_traffic:
         ttl = random.choice(common_ttls)
 
         # Generate random start time and duration for the attack
-        start_time = datetime.utcfromtimestamp(0) + timedelta(seconds=random.uniform(0, 10))
+        start_time = datetime.now() + timedelta(seconds=random.uniform(0, 10))
         duration = random.uniform(60, 600) if is_attack else random.uniform(10, 70)
         nr_packets = round(random.uniform(10e3, 10e6)) if is_attack else round(random.uniform(10e2, 10e5))
         nr_megabytes = round(nr_packets / random.uniform(1000, 5000), 2)

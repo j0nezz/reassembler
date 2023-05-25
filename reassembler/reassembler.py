@@ -5,10 +5,10 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
-__all__ = ['Reassembler']
-
-from fingerprint import read_fingerprints_from_folder, flatten_fingerprint
 from utils import calculate_hash
+from .fingerprint import flatten_fingerprint, read_fingerprints_from_folder
+
+__all__ = ['Reassembler']
 
 DEFAULT_PERCENTILES = [25, 50, 75]
 
@@ -64,8 +64,6 @@ class Reassembler:
         self.fps['time_start'] = pd.to_datetime(self.fps['time_start'])
         self.fps['time_end'] = self.fps['time_start'] + pd.to_timedelta(self.fps['duration_seconds'], unit='s')
         self.target = self.find_target()
-
-        # TODO: Run different configurations and evaluate which works best
 
     def drop_fingerprints(self, percentage_to_drop):
         num_rows_to_drop = int(self.fps.shape[0] * percentage_to_drop)
@@ -175,6 +173,12 @@ class Reassembler:
 
         self.summary = summary
 
+        # filtered_intermediate_nodes.plot.scatter(x='hops_to_target', y='fraction_of_total_attack')
+        grouped_data = filtered_intermediate_nodes.groupby('hops_to_target')[
+            'fraction_of_total_attack'].sum().reset_index()
+
+        grouped_data.plot.bar(x='hops_to_target', y='fraction_of_total_attack')
+
         return self
 
         # self.draw_percentiles(filtered_intermediate_nodes, 'hops_to_target', 'detection_threshold')
@@ -227,6 +231,7 @@ class Reassembler:
         return possible_targets.index[0]
 
     def save_to_json(self, baseDir="./global-fp"):
+        print("Saving...")
         if self.summary is None:
             raise ValueError("Please call the reassemble method first")
 
