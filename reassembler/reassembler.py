@@ -77,23 +77,29 @@ class Reassembler:
         if percentiles is None:
             percentiles = DEFAULT_PERCENTILES
 
-        plt.scatter(df[colA], df[colB])
-        colormap = plt.get_cmap('plasma', len(percentiles) + 1)
+        colormap = plt.get_cmap('tab10')
 
         percentile_values = calculate_percentile_values(df[colB], percentiles)
         categories = pd.cut(df[colB], bins=[-np.inf, *percentile_values, np.inf], labels=False, duplicates="drop")
 
+        # Calculate the minimum and maximum values of the column
+        min_value = df['nr_packets'].min()
+        max_value = df['nr_packets'].max()
+
+        # Perform min-max scaling
+        df['sizes'] = (df['nr_packets'] - min_value) / (max_value - min_value)
+
         # Create the scatter plot with the assigned colors
-        plt.scatter(df[colA], df[colB], c=colormap(categories))
+        plt.scatter(df[colA], df[colB], c=colormap(categories), s=df['sizes'] * 200)
 
         # Draw percentile lines and add legend
         for value, percentile, color in zip(percentile_values, percentiles, colormap.colors[:-1]):
             plt.axhline(value, linestyle='--', color=color, label=f'{percentile}th percentile')
 
-        plt.xlabel(colA)
-        plt.ylabel(colB)
+        plt.xlabel("Hops to Target")
+        plt.ylabel("Detection Threshold")
         plt.legend()
-        plt.title(f'{colA} vs {colB}')
+        plt.tight_layout()
         plt.show()
 
         return self
@@ -177,7 +183,9 @@ class Reassembler:
         grouped_data = filtered_intermediate_nodes.groupby('hops_to_target')[
             'fraction_of_total_attack'].sum().reset_index()
 
-        grouped_data.plot.bar(x='hops_to_target', y='fraction_of_total_attack')
+        # grouped_data.plot.bar(x='hops_to_target', y='fraction_of_total_attack')
+        # print(filtered_intermediate_nodes.columns)
+        # self.draw_percentiles(filtered_intermediate_nodes, 'hops_to_target', 'detection_threshold')
 
         return self
 
