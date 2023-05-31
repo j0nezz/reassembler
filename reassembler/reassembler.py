@@ -1,5 +1,6 @@
 import json
 import os
+import random
 
 import numpy as np
 import pandas as pd
@@ -64,12 +65,18 @@ class Reassembler:
         self.fps['time_start'] = pd.to_datetime(self.fps['time_start'])
         self.fps['time_end'] = self.fps['time_start'] + pd.to_timedelta(self.fps['duration_seconds'], unit='s')
         self.target = self.find_target()
+        self.drop = 0
 
     def drop_fingerprints(self, percentage_to_drop):
-        num_rows_to_drop = int(self.fps.shape[0] * percentage_to_drop)
-        rows_to_drop = self.fps[self.fps['location'] != self.target].sample(n=num_rows_to_drop).index
-        df_dropped = self.fps.drop(rows_to_drop)
-        self.fps = df_dropped.copy()
+        self.drop = percentage_to_drop
+
+        if percentage_to_drop > 0:
+            unique_keys = self.fps[self.fps['location'] != self.target]['key'].unique()
+            num_to_drop = int(len(unique_keys) * percentage_to_drop)
+            keys_to_drop = np.random.choice(unique_keys, num_to_drop, replace=False)
+            rows_to_drop = self.fps[self.fps['key'].isin(keys_to_drop)].index
+            df_dropped = self.fps.drop(rows_to_drop)
+            self.fps = df_dropped.copy()
 
         return self
 
@@ -104,6 +111,23 @@ class Reassembler:
 
         return self
 
+    def plot_attack_coverage(self, data):
+        plt.rc('font', size=15)
+        plt.bar(data['hops_to_target'], data['fraction_of_total_attack'])
+        plt.ylim(0, 1)
+        threshold = 1
+        tolerance = 1e-6
+        for i, value in enumerate(data['fraction_of_total_attack']):
+            if value-tolerance > threshold:
+                plt.gca().get_children()[i].set_color('tab:red')
+
+        plt.xlabel("Distance to Target (Hops)")
+        plt.ylabel("Fraction of Total Attack")
+        plt.tight_layout()
+        plt.savefig(f"coverage-dropped-{self.drop:.1f}.png", dpi=300)
+        plt.show()
+
+
     def reassemble(self):
         target = self.target
 
@@ -124,7 +148,7 @@ class Reassembler:
             # & ~self.fps['location'].isin(entries_at_target['source_ip'])
                                 ].copy()
 
-        # Filtering by attak source poses the problem, that intermediate nodes are not considered if they send a legitimate own packet to the target
+        # Filtering by attack source poses the problem, that intermediate nodes are not considered if they send a legitimate own packet to the target
         # In turn, this could also be abused to intentionally cancel out intermediate nodes by spoofing their IP address and sending a packet.
         # print("Filter by attack source: ",
         #      len(observing_fp[observing_fp['location'].isin(entries_at_target['source_ip'])]))
@@ -133,7 +157,6 @@ class Reassembler:
 
         sources = entries_at_target['ttl'].apply(lambda x: len(x))
 
-        # TODO: Filter out fingerprints from sources
         intermediate_nodes = observing_fp.groupby('location').agg(
             {'nr_packets': 'sum', 'hops_to_target': 'mean', 'detection_threshold': 'min', 'time_start': 'min',
              'time_end': 'max', 'distance': 'min'}).copy()
@@ -183,7 +206,8 @@ class Reassembler:
         grouped_data = filtered_intermediate_nodes.groupby('hops_to_target')[
             'fraction_of_total_attack'].sum().reset_index()
 
-        # grouped_data.plot.bar(x='hops_to_target', y='fraction_of_total_attack')
+        # self.plot_attack_coverage(grouped_data)
+
         # print(filtered_intermediate_nodes.columns)
         # self.draw_percentiles(filtered_intermediate_nodes, 'hops_to_target', 'detection_threshold')
 
