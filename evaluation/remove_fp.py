@@ -5,6 +5,7 @@ from matplotlib import pyplot as plt
 from netaddr import IPNetwork
 
 from generator import Generator
+from logger import LOGGER
 from reassembler import Reassembler
 
 import matplotlib.colors as mcolors
@@ -35,7 +36,7 @@ def evaluate_intermediate_nodes_with_fp_dropped():
     for i in range(10):
         fp = copy.deepcopy(scenario.fingerprints)
         drop_pct = round(i * 0.1, 1)
-        print(f"Run {i} with {drop_pct} dropped")
+        LOGGER.debug(f"Run {i} with {drop_pct} dropped")
         dropped.append(drop_pct)
         summary = Reassembler(fingerprint_data=fp).drop_fingerprints(drop_pct).reassemble().add_ground_truth_data(scenario.target, scenario.sources).summary
         summaries.append(summary)

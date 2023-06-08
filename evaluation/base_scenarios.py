@@ -4,6 +4,7 @@ from matplotlib.pyplot import figure
 from netaddr import IPNetwork
 
 from generator import Generator
+from logger import LOGGER
 from reassembler import Reassembler
 
 
@@ -11,17 +12,17 @@ def measure_execution_time(func, name=""):
     start_time = time.time()
     res = func()
     end_time = time.time()
-    print(f"Executed {name} in {end_time - start_time} seconds.")
+    LOGGER.debug(f"Executed {name} in {end_time - start_time} seconds.")
     return res
 
 
 def evaluate_base_scenario():
     figure(figsize=(12, 8), dpi=120)
     n1 = Generator([IPNetwork(f"{10 + i}.0.0.0/8") for i in range(5)], max_levels=3, max_clients=5, spoofed_pct=0.25)
-    print("Total Nodes N1", n1.network.number_of_nodes())
+    LOGGER.debug(f"Total Nodes N1 {n1.network.number_of_nodes()}")
 
     n2 = Generator([IPNetwork(f"{10 + i}.0.0.0/8") for i in range(15)], max_levels=6, max_clients=5, spoofed_pct=0.25)
-    print("Total Nodes Large", n2.network.number_of_nodes())
+    LOGGER.debug(f"Total Nodes Large {n2.network.number_of_nodes()}")
 
     # Scenario 1
     s1 = measure_execution_time(

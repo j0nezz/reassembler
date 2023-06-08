@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 from netaddr import IPNetwork
 
 from generator import Generator
+from logger import LOGGER
 from reassembler import Reassembler
 
 
@@ -42,7 +43,7 @@ def evaluate_spoofed_vs_discarded_nodes():
         .set_random_attack_sources(100))
     for i in range(21):
         spoofed_pct.append(i * 0.05)
-        print(f"Evaluating Run {i + 1} with {0.05 * i} spoofed sources")
+        LOGGER.debug(f"Evaluating Run {i + 1} with {0.05 * i} spoofed sources")
         fp = scenario.set_spoofed_pct(i * 0.05).simulate_attack().fingerprints
         summary = Reassembler(fingerprint_data=fp).reassemble().add_ground_truth_data(scenario.target,
                                                                                       scenario.sources).summary
@@ -95,7 +96,7 @@ def evaluate_spoofed_vs_inferred_distance():
         .set_random_attack_sources(100))
     for i in range(21):
         spoofed_pct.append(i * 0.05)
-        print(f"Evaluating Run {i + 1} with {0.05 * i} spoofed sources")
+        LOGGER.debug(f"Evaluating Run {i + 1} with {0.05 * i} spoofed sources")
         fp = scenario.set_spoofed_pct(i * 0.05).simulate_attack().fingerprints
         summary = Reassembler(fingerprint_data=fp).reassemble().add_ground_truth_data(scenario.target,
                                                                                       scenario.sources).summary

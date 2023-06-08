@@ -11,6 +11,7 @@ import networkx as nx
 from netaddr import IPNetwork, IPAddress
 from networkx import Graph
 
+from logger import LOGGER
 from utils import calculate_hash
 
 # figure(figsize=(12, 8), dpi=120)
@@ -184,7 +185,7 @@ def generate_background_traffic(G, amount, target, sources, targeted_pct=0.2):
 
 
 def generate_attack_fingerprint(G, sources, attack_target, background_traffic):
-    print(f"Generate Attack: {len(sources)} Sources, {len(background_traffic)} BG traffic")
+    LOGGER.info(f"Generate Attack: {len(sources)} Sources, {len(background_traffic)} BG traffic")
     common_ttls = [32, 64, 128, 255]
     intermediary_nodes = {}  # by target
 
