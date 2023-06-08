@@ -50,7 +50,7 @@ def calculate_percentile_values(df_col, percentiles=None):
 
 
 class Reassembler:
-    def __init__(self, fingerprint_folder=None, fingerprint_data=[], simulated=False):
+    def __init__(self, fingerprint_folder=None, fingerprint_data=[], simulated=True):
 
         if len(fingerprint_data) > 0:
             self.fps = pd.concat([pd.json_normalize(flatten_fingerprint(x), 'attack_vectors')
