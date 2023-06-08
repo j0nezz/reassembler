@@ -16,9 +16,3 @@ def evaluate_background_traffic():
         bgs.append(bg)
         summary = Reassembler(fingerprint_data=scenario.fingerprints).reassemble(draw_percentiles=True).add_ground_truth_data(scenario.target, scenario.sources).summary
         summaries.append(summary)
-
-
-
-
-
-

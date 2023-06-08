@@ -14,21 +14,17 @@ from networkx import Graph
 from logger import LOGGER
 from utils import calculate_hash
 
-# figure(figsize=(12, 8), dpi=120)
-
 __all__ = ['Generator']
 
 COLORS = ["tab:purple", "tab:green", "tab:orange", "tab:blue", "tab:olive", 'gold', 'teal']
 
 random.seed(12)
 
-# TODO: move this into class
 SPOOFED_IP_POOL = [IPAddress(random.randint(0, 2 ** 32)) for i in range(1000)]
 
 
 class Generator:
     def __init__(self, subnets: list[IPNetwork], max_levels=3, max_clients=5, spoofed_pct=0.5):
-        self.spoofed_ip_pool = [IPAddress(random.randint(0, 2 ** 32)) for i in range(50)]
         self.max_levels = max_levels
         self.max_clients = max_clients
         self.spoofed_pct = spoofed_pct
@@ -48,7 +44,8 @@ class Generator:
         return self
 
     def add_background_traffic(self, num_background_traffic_routes):
-        self.background_traffic = generate_background_traffic(self.network, num_background_traffic_routes, self.target, self.sources)
+        self.background_traffic = generate_background_traffic(self.network, num_background_traffic_routes, self.target,
+                                                              self.sources)
         return self
 
     def draw_network(self):
@@ -64,7 +61,8 @@ class Generator:
         return self
 
     def simulate_attack(self):
-        self.fingerprints = generate_attack_fingerprint(self.network, self.sources, self.target, self.background_traffic)
+        self.fingerprints = generate_attack_fingerprint(self.network, self.sources, self.target,
+                                                        self.background_traffic)
         return self
 
     def save_to_json(self, output_folder='fingerprints', overwrite_files=True):
@@ -165,6 +163,8 @@ def draw_network(G: Graph):
 
     nx.draw(G, pos, with_labels=False, font_size=14, node_size=node_sizes, width=edge_widths, edge_color=edge_colors,
             node_color=node_colors, labels=labels)
+
+    # Uncomment to print IPs of Network nodes
     # label_pos = {node: (coords[0], coords[1] + 0.05) for node, coords in pos.items()}
     # nx.draw_networkx_labels(G, label_pos, labels=labels, font_size=16)
 
@@ -309,6 +309,7 @@ def generate_attack_fingerprint(G, sources, attack_target, background_traffic):
             fingerprints.append(fingerprint)
 
     str_sources = list(map(str, sources))
+
     # Filter fingerprints from attack sources, as we do not have this data in a real world scenario
     filtered_fingerprints = [f for f in fingerprints if f['location'] not in str_sources]
 
