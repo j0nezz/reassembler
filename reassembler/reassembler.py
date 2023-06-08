@@ -53,7 +53,7 @@ class Reassembler:
     def __init__(self, fingerprint_folder=None, fingerprint_data=[], simulated=True):
 
         if len(fingerprint_data) > 0:
-            self.fps = pd.concat([pd.json_normalize(flatten_fingerprint(x), 'attack_vectors')
+            self.fps = pd.concat([pd.json_normalize(flatten_fingerprint(x, simulated=simulated), 'attack_vectors')
                                   for x in fingerprint_data], ignore_index=True)
         elif fingerprint_folder is not None:
             self.fps = read_fingerprints_from_folder(fingerprint_folder, simulated=simulated)
