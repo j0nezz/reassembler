@@ -84,12 +84,22 @@ Reassembler(fingerprint_folder='./example')
 
 **Real Fingerprints from Dissector**
 ```python
-Reassembler(fingerprint_folder='./dissector', simulated=False)
+Reassembler(fingerprint_folder='./dissector-fp', simulated=False)
                  .reassemble()
                  .save_to_json('./result')
 ```
 
-## Output Format
+### Usage with the DDoS Dissector
+To use the Reassembler with data from the DDoS Dissector, please use the [extended DDoS Dissector](https://github.com/j0nezz/ddos_dissector) which is a fork of the [original DDoS Dissector](https://github.com/ddos-clearing-house/ddos_dissector).
+Make sure to use the reassembler with the `-e` flag, to produce fingerprints of the extended format.
+
+**Example to run DDoS Dissector**
+
+⚠️ _`main.py` referrs to the file of the DDoS Dissector, not the Reassembler_
+```bash
+python ./src/main.py -f ./target/traffic.pcap -e -l "192.168.50.4"  -n 5 --output ./dissector-fp
+```
+## Reassembler Output
 The following example shows the resulting output of a custom scenario based on [CIC-DDoS2019](https://www.unb.ca/cic/datasets/ddos-2019.html) using the [DDoS Dissector](https://github.com/j0nezz/ddos_dissector).
 ```json
 {
