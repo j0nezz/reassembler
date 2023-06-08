@@ -171,6 +171,9 @@ def draw_network(G: Graph):
 
 
 def generate_background_traffic(G, amount, target, sources, targeted_pct=0.2):
+    if amount == 0:
+        return []
+
     unrelated = [(x, y) for x, y in itertools.combinations(G.nodes, 2) if x != y and y != target]
     unrelated_sample = random.sample(unrelated, int(amount * (1 - targeted_pct)))
 

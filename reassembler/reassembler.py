@@ -1,6 +1,5 @@
 import json
 import os
-import random
 
 import numpy as np
 import pandas as pd
@@ -40,7 +39,6 @@ def calculate_hops_to_target(row):
         distances.append(distance)
 
     # Calculate the mean distance
-    # mean_distance = np.mean(ttl) - np.mean(ttl_on_target)
     mean_distance = sum(distances) / len(distances)
     return mean_distance
 
@@ -52,13 +50,13 @@ def calculate_percentile_values(df_col, percentiles=None):
 
 
 class Reassembler:
-    def __init__(self, fingerprint_folder=None, fingerprint_data=[]):
+    def __init__(self, fingerprint_folder=None, fingerprint_data=[], simulated=False):
 
         if len(fingerprint_data) > 0:
             self.fps = pd.concat([pd.json_normalize(flatten_fingerprint(x), 'attack_vectors')
                                   for x in fingerprint_data], ignore_index=True)
         elif fingerprint_folder is not None:
-            self.fps = read_fingerprints_from_folder(fingerprint_folder)
+            self.fps = read_fingerprints_from_folder(fingerprint_folder, simulated=simulated)
         else:
             raise ValueError("No Fingerprint Data provided")
 
@@ -66,6 +64,7 @@ class Reassembler:
         self.fps['time_end'] = self.fps['time_start'] + pd.to_timedelta(self.fps['duration_seconds'], unit='s')
         self.target = self.find_target()
         self.drop = 0
+        self.simulated = simulated
 
     def drop_fingerprints(self, percentage_to_drop):
         self.drop = percentage_to_drop
@@ -105,7 +104,7 @@ class Reassembler:
 
         plt.xlabel("Hops to Target")
         plt.ylabel("Detection Threshold")
-        plt.legend()
+        plt.legend(loc='upper right')
         plt.tight_layout()
         plt.show()
 
@@ -127,50 +126,42 @@ class Reassembler:
         plt.savefig(f"coverage-dropped-{self.drop:.1f}.png", dpi=300)
         plt.show()
 
-
-    def reassemble(self):
+    def reassemble(self, draw_percentiles=False):
         target = self.target
 
-        # TODO: Include protocol / service
         entries_at_target = self.fps[(self.fps['location'] == target) & (self.fps['target'] == target)].copy()
         entries_at_target['ttl_count'] = entries_at_target['ttl'].apply(lambda x: len(x))
         total_attack_size_at_target = entries_at_target['nr_packets'].sum()
 
         # incoming ttl + derive hops from attack target perspective
         ttls_at_target = entries_at_target[
-            ['source_ip', 'ttl']].copy()  # TODO => For multiple attack vectors, there might be multiple entries per IP
+            ['source_ip', 'ttl']].copy()
         ttls_at_target.columns = ['source_ip', 'ttl_on_target']
         ttls_at_target['hops_on_target'] = ttls_at_target['ttl_on_target'].apply(calculate_hops)
 
         observing_fp = self.fps[(self.fps['target'] == target) &
-                                (self.fps['location'] != target)
-            # Filter fingerprints from attack sources to prevent adversarial attacks
-            # & ~self.fps['location'].isin(entries_at_target['source_ip'])
-                                ].copy()
+                                (self.fps['location'] != target)].copy()
 
-        # Filtering by attack source poses the problem, that intermediate nodes are not considered if they send a legitimate own packet to the target
-        # In turn, this could also be abused to intentionally cancel out intermediate nodes by spoofing their IP address and sending a packet.
-        # print("Filter by attack source: ",
-        #      len(observing_fp[observing_fp['location'].isin(entries_at_target['source_ip'])]))
         observing_fp = observing_fp.merge(ttls_at_target, how='left', on='source_ip')
         observing_fp['hops_to_target'] = observing_fp.apply(calculate_hops_to_target, axis=1)
 
         sources = entries_at_target['ttl'].apply(lambda x: len(x))
+        agg_config = {'nr_packets': 'sum', 'hops_to_target': 'mean', 'detection_threshold': 'min', 'time_start': 'min',
+             'time_end': 'max'}
+        if self.simulated:
+            agg_config['distance'] = 'min'
 
-        intermediate_nodes = observing_fp.groupby('location').agg(
-            {'nr_packets': 'sum', 'hops_to_target': 'mean', 'detection_threshold': 'min', 'time_start': 'min',
-             'time_end': 'max', 'distance': 'min'}).copy()
+        intermediate_nodes = observing_fp.groupby('location').agg(agg_config).copy()
         intermediate_nodes['hops_to_target'] = intermediate_nodes['hops_to_target'].round()
-        intermediate_nodes['inferred_distance_diff'] = (
+        if self.simulated:
+            intermediate_nodes['inferred_distance_diff'] = (
                 intermediate_nodes['hops_to_target'] - intermediate_nodes['distance'])
+
         intermediate_nodes['fraction_of_total_attack'] = intermediate_nodes['nr_packets'] / total_attack_size_at_target
         intermediate_nodes['duration_seconds'] = (
                 intermediate_nodes['time_end'] - intermediate_nodes['time_start']).dt.total_seconds()
         intermediate_nodes = intermediate_nodes.applymap(lambda x: x.isoformat() if isinstance(x, pd.Timestamp) else x)
 
-        # TODO make this threshold dynamic based on observed values at the target (e.g. <1% of attack duration)
-        #    print("Z-Score", np.abs(stats.zscore(intermediate_nodes['duration_seconds'])))
-        # filtered_intermediate_nodes = intermediate_nodes[np.abs(stats.zscore(intermediate_nodes['duration_seconds'])) < 3]
         filtered_intermediate_nodes = intermediate_nodes[intermediate_nodes['duration_seconds'] > 60]
 
         pct_spoofed = len(entries_at_target[entries_at_target['ttl_count'] > 1]) / len(entries_at_target)
@@ -202,26 +193,10 @@ class Reassembler:
 
         self.summary = summary
 
-        # filtered_intermediate_nodes.plot.scatter(x='hops_to_target', y='fraction_of_total_attack')
-        grouped_data = filtered_intermediate_nodes.groupby('hops_to_target')[
-            'fraction_of_total_attack'].sum().reset_index()
-
-        # self.plot_attack_coverage(grouped_data)
-
-        # print(filtered_intermediate_nodes.columns)
-        # self.draw_percentiles(filtered_intermediate_nodes, 'hops_to_target', 'detection_threshold')
+        if draw_percentiles:
+            self.draw_percentiles(filtered_intermediate_nodes, 'hops_to_target', 'detection_threshold')
 
         return self
-
-        # self.draw_percentiles(filtered_intermediate_nodes, 'hops_to_target', 'detection_threshold')
-        # sns.lmplot(x='hops_to_target', y='detection_threshold', data=filtered_intermediate_nodes, fit_reg=True)
-
-        # filtered_intermediate_nodes.plot.scatter(x='hops_to_target', y='detection_threshold')
-
-        # bins = filtered_intermediate_nodes.groupby('hops_to_target').agg(
-        #    {'nr_packets': list, 'fraction_of_total_attack': 'sum'})
-
-        # plot_network(sources.tolist(), bins['nr_packets'].sort_index(ascending=False).tolist())
 
     def add_ground_truth_data(self, target, sources):
         if self.summary is None:
@@ -251,7 +226,7 @@ class Reassembler:
         Find the overall target of the attack by comparing target and location in each fingerprint
         """
         possible_targets = (self.fps[(self.fps['target'] == self.fps['location']) &
-                                     (self.fps['detection_threshold'] > 0.5)]
+                                     (self.fps['detection_threshold'] >= 0.5)]
                             .groupby(['location'])
                             .agg({'nr_packets': 'sum', 'key': 'min', 'detection_threshold': 'min'})
                             .sort_values('nr_packets', ascending=False))
@@ -263,7 +238,6 @@ class Reassembler:
         return possible_targets.index[0]
 
     def save_to_json(self, baseDir="./global-fp"):
-        print("Saving...")
         if self.summary is None:
             raise ValueError("Please call the reassemble method first")
 
