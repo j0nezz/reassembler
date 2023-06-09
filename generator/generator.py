@@ -24,6 +24,9 @@ SPOOFED_IP_POOL = [IPAddress(random.randint(0, 2 ** 32)) for i in range(1000)]
 
 
 class Generator:
+    """
+    Helper Class providing a fluent API for the network simulation and fingerprint generation.
+    """
     def __init__(self, subnets: list[IPNetwork], max_levels=3, max_clients=5, spoofed_pct=0.5):
         self.max_levels = max_levels
         self.max_clients = max_clients
@@ -228,12 +231,15 @@ def generate_attack_fingerprint(G, sources, attack_target, background_traffic):
             if is_attack:
                 intermediary_nodes[node]["targets"][target]["is_attack"] = True
 
+            # calculate delay along path
             if i > 0:
                 prev_node = path[i - 1]
                 ms = G[prev_node][node]['ms']
                 accumulated_weight += ms / 1000
             source_data = G.nodes(data=True)[source]
 
+            # For spoofed sources, the calculation of e.g. packet_by_source is different
+            # Hence a distinction is made here, but the resulting keys are the same
             if source_data.get('spoofed', False):
                 spoofed_sources = list(map(str, source_data.get('spoofed_ips', [])))
                 intermediary_nodes[node]["targets"][target]["ttl_by_source"].update(
@@ -261,6 +267,7 @@ def generate_attack_fingerprint(G, sources, attack_target, background_traffic):
                 start_time + timedelta(seconds=accumulated_weight))
             intermediary_nodes[node]["targets"][target]["duration_seconds"].append(duration)
             intermediary_nodes[node]["targets"][target]["distance_to_target"] = len(path) - 1 - i
+            # Decrease TTL on each hop
             ttl -= 1
 
     # Generate attack fingerprints for each intermediary node

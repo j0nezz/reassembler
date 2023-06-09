@@ -6,8 +6,13 @@ import pandas as pd
 __all__ = ['flatten_fingerprint', 'read_fingerprints_from_folder']
 
 
-# Function to extract nested data and create new records with the desired format
 def flatten_fingerprint(data, simulated=False):
+    """
+    Extract nested data and create new records with the desired format
+    :param data: List of attack vectors that make up the attack
+    :param simulated: Boolean stating whether additional values from the simulation are availble (is_attack, distance)
+    :return: Dictionary with flattened list of attack vectors
+    """
     new_attack_vectors = []
 
     for av in data['attack_vectors']:
@@ -30,8 +35,13 @@ def flatten_fingerprint(data, simulated=False):
     return data
 
 
-
 def read_fingerprints_from_folder(path: str, simulated=False) -> pd.DataFrame:
+    """
+    Read fingerprints from a folder into a DataFrame
+    :param path: Path of folder where fingerprints are located
+    :param simulated: Boolean stating whether additional values from the simulation are availble (is_attack, distance)
+    :return: Dataframe of flattened fingerprints
+    """
     # create an empty list to store the DataFrames
     dfs = []
 
@@ -44,4 +54,5 @@ def read_fingerprints_from_folder(path: str, simulated=False) -> pd.DataFrame:
                 reformatted_data = flatten_fingerprint(data, simulated=simulated)
                 df = pd.json_normalize(reformatted_data, 'attack_vectors')
                 dfs.append(df)
+
     return pd.concat(dfs, ignore_index=True)

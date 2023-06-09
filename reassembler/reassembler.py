@@ -13,44 +13,11 @@ __all__ = ['Reassembler']
 DEFAULT_PERCENTILES = [25, 50, 75]
 
 
-def calculate_hops(ttl_list):
-    # Custom function to calculate the number of hops
-    common_ttl_values = [32, 64, 128, 255]
-    # Find the next higher common TTL value
-    # We use >= to account for nodes that record their own sent traffic (random background traffic)
-    hops = [min(filter(lambda x: x >= ttl, common_ttl_values)) - ttl for ttl in ttl_list]
-    return hops
-
-
-def calculate_hops_to_target(row):
-    ttl = row['ttl']
-    ttl_on_target = row['ttl_on_target']
-
-    distances = []
-
-    for t in ttl:
-        # Get the largest ttl_on_target value that is smaller than t
-        valid_targets = [x for x in ttl_on_target if x <= t]
-        if valid_targets:
-            target = max(valid_targets)
-            distance = t - target
-        else:
-            distance = float('inf')
-        distances.append(distance)
-
-    # Calculate the mean distance
-    mean_distance = sum(distances) / len(distances)
-    return mean_distance
-
-
-def calculate_percentile_values(df_col, percentiles=None):
-    if percentiles is None:
-        percentiles = DEFAULT_PERCENTILES
-    return [np.percentile(df_col, p) for p in percentiles]
-
-
 class Reassembler:
-    def __init__(self, fingerprint_folder=None, fingerprint_data=[], simulated=True):
+    def __init__(self, fingerprint_folder=None, fingerprint_data=None, simulated=True):
+        # Avoid mutable default value
+        if fingerprint_data is None:
+            fingerprint_data = []
 
         if len(fingerprint_data) > 0:
             self.fps = pd.concat([pd.json_normalize(flatten_fingerprint(x, simulated=simulated), 'attack_vectors')
@@ -65,6 +32,7 @@ class Reassembler:
         self.target = self.find_target()
         self.drop = 0
         self.simulated = simulated
+        self.summary = None
 
     def drop_fingerprints(self, percentage_to_drop):
         self.drop = percentage_to_drop
@@ -117,7 +85,7 @@ class Reassembler:
         threshold = 1
         tolerance = 1e-6
         for i, value in enumerate(data['fraction_of_total_attack']):
-            if value-tolerance > threshold:
+            if value - tolerance > threshold:
                 plt.gca().get_children()[i].set_color('tab:red')
 
         plt.xlabel("Distance to Target (Hops)")
@@ -126,42 +94,44 @@ class Reassembler:
         plt.savefig(f"coverage-dropped-{self.drop:.1f}.png", dpi=300)
         plt.show()
 
-    def reassemble(self, draw_percentiles=False):
+    def reassemble(self, draw_percentiles=False, plot_coverage=False):
         target = self.target
 
+        # Select Values at Target
         entries_at_target = self.fps[(self.fps['location'] == target) & (self.fps['target'] == target)].copy()
         entries_at_target['ttl_count'] = entries_at_target['ttl'].apply(lambda x: len(x))
-        total_attack_size_at_target = entries_at_target['nr_packets'].sum()
-
+        total_nr_packets_at_target = entries_at_target['nr_packets'].sum()
         # incoming ttl + derive hops from attack target perspective
         ttls_at_target = entries_at_target[
             ['source_ip', 'ttl']].copy()
         ttls_at_target.columns = ['source_ip', 'ttl_on_target']
         ttls_at_target['hops_on_target'] = ttls_at_target['ttl_on_target'].apply(calculate_hops)
 
+        # Find Intermediate Nodes
         observing_fp = self.fps[(self.fps['target'] == target) &
                                 (self.fps['location'] != target)].copy()
-
+        # Merge the TTL observed at the target for further aggregation
         observing_fp = observing_fp.merge(ttls_at_target, how='left', on='source_ip')
         observing_fp['hops_to_target'] = observing_fp.apply(calculate_hops_to_target, axis=1)
-
-        sources = entries_at_target['ttl'].apply(lambda x: len(x))
+        # Aggregate intermediate nodes
         agg_config = {'nr_packets': 'sum', 'hops_to_target': 'mean', 'detection_threshold': 'min', 'time_start': 'min',
-             'time_end': 'max'}
+                      'time_end': 'max'}
         if self.simulated:
             agg_config['distance'] = 'min'
 
         intermediate_nodes = observing_fp.groupby('location').agg(agg_config).copy()
         intermediate_nodes['hops_to_target'] = intermediate_nodes['hops_to_target'].round()
+
         if self.simulated:
             intermediate_nodes['inferred_distance_diff'] = (
-                intermediate_nodes['hops_to_target'] - intermediate_nodes['distance'])
+                    intermediate_nodes['hops_to_target'] - intermediate_nodes['distance'])
 
-        intermediate_nodes['fraction_of_total_attack'] = intermediate_nodes['nr_packets'] / total_attack_size_at_target
+        intermediate_nodes['fraction_of_total_attack'] = intermediate_nodes['nr_packets'] / total_nr_packets_at_target
         intermediate_nodes['duration_seconds'] = (
                 intermediate_nodes['time_end'] - intermediate_nodes['time_start']).dt.total_seconds()
         intermediate_nodes = intermediate_nodes.applymap(lambda x: x.isoformat() if isinstance(x, pd.Timestamp) else x)
 
+        # Discard background intermediate nodes based on a time threshold
         filtered_intermediate_nodes = intermediate_nodes[intermediate_nodes['duration_seconds'] > 60]
 
         pct_spoofed = len(entries_at_target[entries_at_target['ttl_count'] > 1]) / len(entries_at_target)
@@ -186,12 +156,17 @@ class Reassembler:
                     'hops_to_target').to_dict('index')
             },
             'sources': {
-                'nr_sources': len(sources),
+                'nr_sources': len(entries_at_target),
                 'pct_spoofed': pct_spoofed
             }
         }
 
         self.summary = summary
+
+        if plot_coverage:
+            grouped_data = filtered_intermediate_nodes.groupby('hops_to_target')[
+                'fraction_of_total_attack'].sum().reset_index()
+            self.plot_attack_coverage(grouped_data)
 
         if draw_percentiles:
             self.draw_percentiles(filtered_intermediate_nodes, 'hops_to_target', 'detection_threshold')
@@ -222,9 +197,6 @@ class Reassembler:
         return self
 
     def find_target(self) -> str:
-        """
-        Find the overall target of the attack by comparing target and location in each fingerprint
-        """
         possible_targets = (self.fps[(self.fps['target'] == self.fps['location']) &
                                      (self.fps['detection_threshold'] >= 0.5)]
                             .groupby(['location'])
@@ -237,16 +209,53 @@ class Reassembler:
         # returns IP of most targeted location
         return possible_targets.index[0]
 
-    def save_to_json(self, baseDir="./global-fp"):
+    def save_to_json(self, base_dir="./global-fp"):
         if self.summary is None:
             raise ValueError("Please call the reassemble method first")
 
-        if not os.path.exists(baseDir):
-            os.makedirs(baseDir)
+        if not os.path.exists(base_dir):
+            os.makedirs(base_dir)
 
         data = calculate_hash(self.summary)
 
-        with open(f"{baseDir}/{data['key']}.json", "w") as f:
+        with open(f"{base_dir}/{data['key']}.json", "w") as f:
             json.dump(data, f, indent=2)
 
         return self
+
+
+# Helper Methods
+
+def calculate_hops(ttl_list):
+    common_ttl_values = [32, 64, 128, 255]
+    # Find the next higher common TTL value
+    # We use >= to account for nodes that record their own sent traffic (random background traffic)
+    hops = [min(filter(lambda x: x >= ttl, common_ttl_values)) - ttl for ttl in ttl_list]
+    return hops
+
+
+def calculate_hops_to_target(row):
+    ttl = row['ttl']
+    ttl_on_target = row['ttl_on_target']
+
+    distances = []
+
+    for t in ttl:
+        # Get the largest ttl_on_target value that is smaller than t
+        valid_targets = [x for x in ttl_on_target if x <= t]
+        if valid_targets:
+            target = max(valid_targets)
+            distance = t - target
+        else:
+            distance = float('inf')
+        distances.append(distance)
+
+    # Calculate the mean distance
+    mean_distance = sum(distances) / len(distances)
+    return mean_distance
+
+
+def calculate_percentile_values(df_col, percentiles=None):
+    if percentiles is None:
+        percentiles = DEFAULT_PERCENTILES
+    return [np.percentile(df_col, p) for p in percentiles]
