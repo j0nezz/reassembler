@@ -32,8 +32,8 @@ There are three main modules to this project
     ```
     [Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html):
     ```bash
-    conda create -n dissector python=3.10
-    conda activate dissector
+    conda create -n reassembler python=3.10
+    conda activate reassembler
     conda install pip
     pip install -r requirements.txt
     ```
