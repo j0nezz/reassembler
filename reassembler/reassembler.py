@@ -143,10 +143,13 @@ class Reassembler:
             'attack': {
                 'start_time': entries_at_target['time_start'].min().isoformat(),
                 'end_time': entries_at_target['time_end'].max().isoformat(),
-                'duration_seconds': entries_at_target['duration_seconds'].mean()
+                'duration_seconds': entries_at_target['duration_seconds'].mean(),
+                'service': entries_at_target['service'].value_counts().idxmax() if entries_at_target['service'].notna().any() else None,
+                'protocol': entries_at_target['protocol'].value_counts().idxmax()
             },
             'target': {
-                'ip': target
+                'ip': target,
+                'detection_threshold': entries_at_target['detection_threshold'].mean()
             },
             'intermediate_nodes': {
                 'discarded_intermediate_nodes': len(intermediate_nodes) - len(filtered_intermediate_nodes),
