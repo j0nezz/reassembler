@@ -26,6 +26,7 @@ def plot(dropped, summaries):
     df.plot(y=["Discarded", "Estimated", "Ground truth"], kind="bar", ylabel='Intermediate Nodes', xlabel='% Dropped Fingerprints', cmap=cmap)
     plt.tight_layout()
     plt.savefig("intermediate-nodes-eval.png", dpi=300)
+    plt.show()
 
 
 def evaluate_intermediate_nodes_with_fp_dropped():
