@@ -11,6 +11,8 @@ There are three main modules to this project
 - **Generator:**
    The Generator simulates a TCP SYN attack based on a simulated network. 
    The Fingerprints can be stored to a folder to create different scenarios.
+   
+   _Note: Instead of simulating fingerprints, the Reassembler can also be used with the [DDoS Dissector](https://github.com/j0nezz/ddos_dissector)._
 
 - **Evaluation:**
   The evaluation module provides the functionality for running the experiments included in the thesis again.
