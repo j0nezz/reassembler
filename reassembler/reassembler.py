@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
+from logger import LOGGER
 from utils import calculate_hash
 from .fingerprint import flatten_fingerprint, read_fingerprints_from_folder
 
@@ -107,13 +108,13 @@ class Reassembler:
         ttls_at_target.columns = ['source_ip', 'ttl_on_target']
         ttls_at_target['hops_on_target'] = ttls_at_target['ttl_on_target'].apply(calculate_hops)
 
-        # Find Intermediate Nodes
+        # Find observing Attack Vectors
         observing_fp = self.fps[(self.fps['target'] == target) &
                                 (self.fps['location'] != target)].copy()
         # Merge the TTL observed at the target for further aggregation
         observing_fp = observing_fp.merge(ttls_at_target, how='left', on='source_ip')
         observing_fp['hops_to_target'] = observing_fp.apply(calculate_hops_to_target, axis=1)
-        # Aggregate intermediate nodes
+        # Aggregate observing Attack Vectors to Intermediate Nodes
         agg_config = {'nr_packets': 'sum', 'hops_to_target': 'mean', 'detection_threshold': 'min', 'time_start': 'min',
                       'time_end': 'max'}
         if self.simulated:
@@ -246,11 +247,8 @@ def calculate_hops_to_target(row):
     for t in ttl:
         # Get the largest ttl_on_target value that is smaller than t
         valid_targets = [x for x in ttl_on_target if x <= t]
-        if valid_targets:
-            target = max(valid_targets)
-            distance = t - target
-        else:
-            distance = float('inf')
+        target = max(valid_targets)
+        distance = t - target
         distances.append(distance)
 
     # Calculate the mean distance
