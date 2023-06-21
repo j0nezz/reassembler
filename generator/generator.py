@@ -72,6 +72,8 @@ class Generator:
         if len(self.fingerprints) == 0:
             raise ValueError("Please run a simulation first")
 
+        LOGGER.info(f"Saving {len(self.fingerprints)} fingerprints...")
+
         if os.path.exists(output_folder) and overwrite_files:
             shutil.rmtree(output_folder)
 
@@ -83,10 +85,12 @@ class Generator:
             with open(output_file, "w") as f:
                 json.dump(fingerprint, f, indent=2)
 
+        LOGGER.info("Saved!")
         return self
 
 
 def create_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clients=5, color='tab:blue', spoofed_pct=0.8):
+    LOGGER.info(f"Initializing Subnet {str(root)}")
     graph = nx.Graph()
     graph.add_node(root.ip, ip=root.ip, level=1, client=False, spoofed=False)
 
@@ -119,6 +123,7 @@ def create_subnet(root: IPNetwork, levels=3, prefixlen=4, max_clients=5, color='
 
 
 def create_network(subnets: list[IPNetwork], max_levels=3, max_clients=5, spoofed_pct=0.5):
+    LOGGER.info("Creating Network")
     subgraphs = [create_subnet(s, levels=random.randint(1, max_levels), color=COLORS[i % len(COLORS)],
                                max_clients=random.randint(2, max_clients), prefixlen=3, spoofed_pct=spoofed_pct) for
                  i, s in
@@ -188,7 +193,7 @@ def generate_background_traffic(G, amount, target, sources, targeted_pct=0.2):
 
 
 def generate_attack_fingerprint(G, sources, attack_target, background_traffic):
-    LOGGER.info(f"Generate Attack: {len(sources)} Sources, {len(background_traffic)} BG traffic")
+    LOGGER.info(f"Generate Attack with {len(sources)} Sources and {len(background_traffic)} BG traffic")
     common_ttls = [32, 64, 128, 255]
     intermediary_nodes = {}  # by target
 
