@@ -149,3 +149,18 @@ The following example shows the resulting output of a custom scenario based on [
   "key": "30c8aa201ceff1847db9513a49a8d88f"
 }
 ```
+
+## Demo
+### Generator
+Simulating a network and generating fingerprints
+
+https://github.com/j0nezz/reassembler/assets/12492528/8ceee8a4-2101-40e0-8168-6711883ac88e
+
+### Reassembler
+Global attack view based on fingerprints
+
+https://github.com/j0nezz/reassembler/assets/12492528/be380d4e-c106-400b-ac3a-00d0e06af3b6
+
+
+
+
